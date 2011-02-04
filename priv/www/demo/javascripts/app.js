@@ -183,6 +183,13 @@ function sammyapp() {
                     $.sammy.apps['#meeting'].run().trigger('connect-meeting', [meeting, result, presence]);
                 });
             });
+        var that = this;
+        /* HACK */
+        window.onbeforeunload = function() {
+            presence.presence.meeting(that.params['name']).leave(function(err) {
+                /* nothing */
+            });
+        };
     });
     this.get('#/register', function(context) {
         this.title('Register');
