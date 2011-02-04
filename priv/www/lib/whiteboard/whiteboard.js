@@ -543,7 +543,6 @@ window.Whiteboard = {
     */
     undo: function() {
         reverseEvent = this.events.pop();
-        console.log(reverseEvent.type);
         this.redraw();
     }
 
