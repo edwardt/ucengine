@@ -11,6 +11,8 @@ function sammyapp() {
     };
     var infos = null;
 
+    var open = true;
+
     this.setTitle(function(title) {
         return [title, " - U.C.Engine"].join('');
     });
@@ -104,10 +106,35 @@ function sammyapp() {
     };
 
     this.get('#/', function(context) {
-        this.title('Home');
-        build_home(function(c) {
-            context.loadPage('templates/index.tpl', c);
-        });
+        if (open) {
+            if (presence.presence == null) {
+                var uid      = "guest_" + (new Date().getTime());
+                var nickname = uid;
+                var password = "default_password";
+                
+                var that = this;
+                uce.user.registerWithPassword(uid, password, {'nickname': nickname},
+                                              function(err, result) {
+                                                  uce.presence.create(password,
+                                                                      uid,
+                                                                      nickname,
+                                                                      function(err, result, xhr) {
+                                                                          if (err) {
+                                                                              return;
+                                                                          }
+                                                                          var presence = uce.attachPresence(result);
+                                                                          that.trigger('connected', {me:uid, presence:presence});
+                                                                      });                                   
+                                              });
+            } else {
+                this.redirect('#/meeting/demo');
+            }
+        } else {
+            this.title('Home');
+            build_home(function(c) {
+                context.loadPage('templates/index.tpl', c);
+            });
+        }
     });
     this.post('#/user/login', function() {
         var uid      = this.params['email'];
