@@ -19,7 +19,7 @@
 
 -author('thierry.bomandouki@af83.com').
 
--export([add/1, list/7, delete/1]).
+-export([add/1, list/7, delete/2]).
 
 -include("uce.hrl").
 
@@ -211,7 +211,7 @@ make_list_json_events([{struct, Elems}|Tail]) ->
                         metadata=Metadata}] ++ make_list_json_events(Tail)
     end.
 
-delete(Id) ->
+delete(_Domain, Id) ->
     [Host] = utils:get(config:get(solr), [host], [?DEFAULT_HOST]),
     ibrowse:send_req(Host ++ ?SOLR_UPDATE, [], post, "<delete><query>"++ Id ++"</query></delete>"),
     {ok, deleted}.

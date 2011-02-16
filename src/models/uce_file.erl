@@ -26,31 +26,26 @@
 
 add(#uce_file{location=Location, name=Name} = File) ->
     case location_helpers:exists(Location) of
-	false ->
-	    {error, not_found};
-	true ->
-	    {Id, Mime} =
-		case re:run(Name, "([^/]+)\\.([^/]+)$ ?", [{capture, all, list}]) of
-		    {match, [_, BareName, Extension]} ->
-			{BareName ++ "_" ++ utils:random() ++ "." ++ Extension,
-			 yaws_api:mime_type(Name)};
-		    _ ->
-			{Name ++ "_" ++ utils:random(), "text/plain"}
-		end,
-	    case ?DB_MODULE:add(File#uce_file{id=Id, mime=Mime}) of
-		{error, Reason} ->
-		    {error, Reason};
-		{ok, created} ->
-		    {ok, Id}
-	    end
+        false ->
+            throw({error, not_found});
+        true ->
+            {Id, Mime} =
+                case re:run(Name, "([^/]+)\\.([^/]+)$ ?", [{capture, all, list}]) of
+                    {match, [_, BareName, Extension]} ->
+                        {BareName ++ "_" ++ utils:random() ++ "." ++ Extension,
+                         yaws_api:mime_type(Name)};
+                    _ ->
+                        {Name ++ "_" ++ utils:random(), "text/plain"}
+                end,
+            ?DB_MODULE:add(File#uce_file{id=Id, mime=Mime})
     end.
 
 list(Location) ->
     case location_helpers:exists(Location) of
-	false ->
-	    {error, not_found};
-	true ->
-	    ?DB_MODULE:list(Location)
+        false ->
+            throw({error, not_found});
+        true ->
+            ?DB_MODULE:list(Location)
     end.
 
 get(Id) ->
@@ -58,8 +53,8 @@ get(Id) ->
 
 delete(Id) ->
     case ?MODULE:get(Id) of
-	{error, Reason} ->
-	    {error, Reason};
-	{ok, _} ->
-	    ?DB_MODULE:delete(Id)
+        {error, Reason} ->
+            {error, Reason};
+        {ok, _} ->
+            ?DB_MODULE:delete(Id)
     end.

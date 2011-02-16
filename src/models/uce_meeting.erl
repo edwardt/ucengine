@@ -19,133 +19,139 @@
 
 -author('victor.goya@af83.com').
 
--export([add/1, delete/1, update/1, get/1, list/1, join/2, leave/2, roster/1, exists/1]).
+-export([add/1,
+         delete/1,
+         update/1,
+         get/1,
+         list/2,
+         join/2,
+         leave/2,
+         roster/1,
+         exists/1]).
 
 -include("uce.hrl").
 -include("uce_models.hrl").
 
-add(#uce_meeting{} = Meeting) ->
-    case ?MODULE:exists(Meeting#uce_meeting.id) of
-	true ->
-	    {error, conflict};
-	false ->
-	    [_] = Meeting#uce_meeting.id,
+add(#uce_meeting{id=Id} = Meeting) ->
+    case ?MODULE:exists(Id) of
+        true ->
+            throw({error, conflict});
+        false ->
             ?DB_MODULE:add(Meeting)
     end.
 
 delete(Id) ->
     case ?MODULE:exists(Id) of
-	false ->
-	    {error, not_found};
-	true ->
-	    ?DB_MODULE:delete(Id)
+        false ->
+            throw({error, not_found});
+        true ->
+            ?DB_MODULE:delete(Id)
     end.
-
 
 get(Id) ->
     ?DB_MODULE:get(Id).
 
-update(#uce_meeting{} = Meeting) ->
-    case ?MODULE:get(Meeting#uce_meeting.id) of
-	{error, Reason} ->
-	    {error, Reason};
-	{ok, _} ->
-	    ?DB_MODULE:update(Meeting)
+update(#uce_meeting{id=Id} = Meeting) ->
+    case ?MODULE:exists(Id) of
+        false ->
+            throw({error, not_found});
+        true ->
+            ?DB_MODULE:update(Meeting)
     end.
 
-list(Status) ->
-    Now = utils:now(),
-    case ?DB_MODULE:list() of
-        {error, Reason} ->
-            {error, Reason};
-        {ok, Meetings} ->
-            if
-                Status == "all"; Status=="upcoming"; Status=="opened"; Status=="closed" ->
-                    FilteredMeetings =
-                        lists:filter(fun(#uce_meeting{start_date=Start, end_date=End}) ->
-                                             case Status of
-                                                 "all" ->
-                                                     true;
-                                                 "upcoming" ->
-                                                     Now < Start;
-                                                 "opened" ->
-                                                     case Now >= Start of
+list(Domain, Status) ->
+    {ok, Meetings} = ?DB_MODULE:list(Domain),
+    if
+        Status == "all";
+        Status == "upcoming";
+        Status == "opened";
+        Status == "closed" ->
+            Now = utils:now(),
+            FilteredMeetings =
+                lists:filter(fun(#uce_meeting{start_date=Start, end_date=End}) ->
+                                     case Status of
+                                         "all" ->
+                                             true;
+                                         "upcoming" ->
+                                             Now < Start;
+                                         "opened" ->
+                                             case Now >= Start of
+                                                 true ->
+                                                     if
+                                                         End == ?NEVER_ENDING_MEETING ->
+                                                             true;
+                                                         Now =< End ->
+                                                             true;
                                                          true ->
-                                                             if
-                                                                 End == ?NEVER_ENDING_MEETING -> true;
-                                                                 Now =< End -> true;
-                                                                 true -> false
-                                                             end;
-                                                         false ->
                                                              false
                                                      end;
-                                                 "closed" ->
-                                                     if
-                                                         End == ?NEVER_ENDING_MEETING -> false;
-                                                         Now >= End -> true;
-                                                         true -> false
-                                                     end;
-                                                 _ ->
+                                                 false ->
                                                      false
-                                             end
-                                     end,
-                                     Meetings),
-                    {ok, FilteredMeetings};
-                true ->
-                    {error, bad_parameters}
-            end
+                                             end;
+                                         "closed" ->
+                                             if
+                                                 End == ?NEVER_ENDING_MEETING ->
+                                                     false;
+                                                 Now >= End ->
+                                                     true;
+                                                 true ->
+                                                     false
+                                             end;
+                                         _ ->
+                                             false
+                                     end
+                             end,
+                             Meetings),
+            {ok, FilteredMeetings};
+        true ->
+            throw({error, bad_parameters})
     end.
 
 exists(Id) ->
-    case ?MODULE:get(Id) of
-	{error, _} ->
-	    false;
-	_ ->
-	    true
+    case Id of
+        {"", _} -> % root
+            true;
+        _ ->
+            case catch ?MODULE:get(Id) of
+                {error, not_found} ->
+                    false;
+                {error, Reason} ->
+                    throw({error, Reason});
+                {ok, _} ->
+                    true
+            end
     end.
 
-join(Id, Uid) when is_list(Uid) ->
-    case uce_user:exists(Uid) of
-	false ->
-	    {error, not_found};
-	true ->
-	    case ?MODULE:get(Id) of
-		{error, Reason} ->
-		    {error, Reason};
-		{ok, #uce_meeting{} = Meeting} ->
-		    case lists:member(Uid, Meeting#uce_meeting.roster) of
-			false ->
-			    Roster = Meeting#uce_meeting.roster ++ [Uid],
-			    ?MODULE:update(Meeting#uce_meeting{roster=Roster});
-			true ->
-			    {ok, updated}
-		    end
-	    end
+join(Id, User) ->
+    case uce_user:exists(User) of
+        false ->
+            throw({error, not_found});
+        true ->
+            {ok, Meeting} = ?MODULE:get(Id),
+            case lists:member(User, Meeting#uce_meeting.roster) of
+                false ->
+                    ?MODULE:update(Meeting#uce_meeting{roster=Meeting#uce_meeting.roster ++ [User]});
+                true ->
+                    {ok, updated}
+            end
     end.
 
-leave(Id, Uid) when is_list(Uid) ->
-    case uce_user:exists(Uid) of
-	false ->
-	    {error, not_found};
-	true ->
-	    case ?MODULE:get(Id) of
-		{error, Reason} ->
-		    {error, Reason};
-		{ok, #uce_meeting{} = Meeting} ->
-		    case lists:member(Uid, Meeting#uce_meeting.roster) of
-			false ->
-			    {error, not_found};
-			true ->
-			    Roster = lists:subtract(Meeting#uce_meeting.roster, [Uid]),
-			    ?MODULE:update(Meeting#uce_meeting{roster=Roster})
-		    end
-	    end
+leave(Id, User) ->
+    case uce_user:exists(User) of
+        false ->
+            throw({error, not_found});
+        true ->
+            {ok, Meeting} = ?MODULE:get(Id),
+            case lists:member(User, Meeting#uce_meeting.roster) of
+                false ->
+                    throw({error, not_found});
+                true ->
+                    Roster = lists:subtract(Meeting#uce_meeting.roster, [User]),
+                    ?MODULE:update(Meeting#uce_meeting{roster=Roster})
+            end
     end.
 
 roster(Id) ->
-    case ?MODULE:get(Id) of
-	{error, Reason} ->
-	    {error, Reason};
-	{ok, #uce_meeting{} = Meeting} ->
-	    {ok, Meeting#uce_meeting.roster}
-    end.
+    {ok, Meeting} = ?MODULE:get(Id),
+    {ok, Meeting#uce_meeting.roster}.
+

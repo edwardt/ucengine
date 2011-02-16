@@ -3,6 +3,7 @@
   <ul id="dock">
     <li id="chat-dock" />
     <li id="video-dock" />
+    <li id="fileupload-dock" />
     <li id="filesharing-dock" />
     <li id="whiteboard-dock" />
   </ul>
@@ -11,9 +12,9 @@
     <section id="infos">
       <article class="block info">
 	<div class="block-content">
-          <p><strong>Meeting name :</strong> <span>{{meeting_name}}</span></p>
+          <p><strong>Meeting name :</strong> <span>{{meeting_id}}</span></p>
           <p><strong>Description :</strong><span>{{meeting_desc}}</span></p>
-          <p class="quit"><a href="#/meeting/{{meeting_name}}/quit">Quit the meeting</a></p>
+          <p class="quit"><a href="#/meeting/{{meeting_id}}/quit">Quit the meeting</a></p>
 	</div>
       </article>
       <article id="timer" />
@@ -24,6 +25,7 @@
     </section>
     
     <section id="reduced" class="slots">
+      <article id="fileupload" />
       <article id="filesharing" />
       <article id="chat" />
       <article id="whiteboard" />

@@ -25,14 +25,8 @@
 
 exists(Location) ->
     case Location of
-	[""] ->
-	    true;
-	[Meeting] ->
-	    case uce_meeting:get([Meeting]) of
-		{error, _} ->
-		    false;
-		_ ->
-		    true
-	    end
+        {"", _Domain} -> % root
+            true;
+        {_Name, _Domain} = Meeting->
+            uce_meeting:exists(Meeting)
     end.
-

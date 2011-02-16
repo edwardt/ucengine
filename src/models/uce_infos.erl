@@ -17,12 +17,13 @@
 %%
 -module(uce_infos).
 
+-include("uce.hrl").
 -include("uce_models.hrl").
 
--export([get/0, update/1]).
+-export([get/1, update/1]).
 
-get() ->
-    ?DB_MODULE:get().
+get(Domain) ->
+    ?DB_MODULE:get(Domain).
 
-update(Metadata) ->
-    ?DB_MODULE:update(Metadata).
+update(#uce_infos{} = Infos) ->
+    ?DB_MODULE:update(Infos).

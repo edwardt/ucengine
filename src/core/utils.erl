@@ -20,17 +20,16 @@
 -author('tbomandouki@af83.com').
 
 -include("uce.hrl").
+-include_lib("yaws/include/yaws_api.hrl").
 
--export([
-         now/0,
+-export([now/0,
          token/0,
          uid/0,
 
          random/0,
          random/1,
          get/2,
-         get/3
-        ]).
+         get/3]).
 
 %% Get current timestamp
 now() ->
@@ -70,3 +69,4 @@ get(Params, [Key|Keys], [Default|Defaults]) ->
                         [Default]
                 end,
     ValueList ++ ?MODULE:get(Params, Keys, Defaults).
+

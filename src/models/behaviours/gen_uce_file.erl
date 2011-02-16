@@ -24,6 +24,7 @@
 behaviour_info(callbacks) ->
     [{add, 1},
      {list, 1},
+     {all, 1},
      {get, 1},
      {delete, 1}];
 

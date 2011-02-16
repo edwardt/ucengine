@@ -22,87 +22,106 @@
 -behaviour(gen_uce_presence).
 
 -export([add/1,
-	 list/1,
-	 get/1,
-	 delete/1,
-	 update/1,
-         all/0]).
+         list/1,
+         get/1,
+         delete/1,
+         update/1,
+         all/1]).
 
 -include("uce.hrl").
 -include("mongodb.hrl").
 
 add(#uce_presence{}=Presence) ->
     case catch emongo:insert_sync(?MONGO_POOL, "uce_presence", to_collection(Presence)) of
-	{'EXIT', _} ->
-	    {error, bad_parameters};
-	_ ->
-	    {ok, Presence#uce_presence.sid}
+        {'EXIT', Reason} ->
+            ?ERROR_MSG("~p~n", [Reason]),
+            throw({error, bad_parameters});
+        _ ->
+            {ok, Presence#uce_presence.id}
     end.
 
-list(EUid) ->
-    case catch emongo:find_all(?MONGO_POOL, "uce_presence", [{"uid", EUid}]) of
-	{'EXIT', _} ->
-	    {error, bad_parameters};
-	Collections ->
-	    Presences = lists:map(fun(Collection) ->
-					  from_collection(Collection)
-				  end,
-				  Collections),
-	    {ok, Presences}
-    end.
-
-all() ->
-    case catch emongo:find_all(?MONGO_POOL, "uce_presence", []) of
-        {'EXIT', _} ->
-            {error, bad_parameters};
+list({User, Domain}) ->
+    case catch emongo:find_all(?MONGO_POOL, "uce_presence", [{"user", User},
+                                                             {"domain", Domain}]) of
+        {'EXIT', Reason} ->
+            ?ERROR_MSG("~p~n", [Reason]),
+            throw({error, bad_parameters});
         Collections ->
-            Presences = lists:map(fun(Collection) ->
-                                          from_collection(Collection)
-                                  end,
-                                  Collections),
-            {ok, Presences}
+            Records = lists:map(fun(Collection) ->
+                                        from_collection(Collection)
+                                end,
+                                Collections),
+            {ok, Records}
     end.
 
-get(ESid) ->
-    case catch emongo:find_one(?MONGO_POOL, "uce_presence", [{"id", ESid}]) of
-	{'EXIT', _} ->
-	    {error, bad_parameters};
-	[Collection] ->
-	    {ok, from_collection(Collection)};
-	_ ->
-	    {error, not_found}
+all(Domain) ->
+    case catch emongo:find_all(?MONGO_POOL, "uce_presence", [{"domain", Domain}]) of
+        {'EXIT', Reason} ->
+            ?ERROR_MSG("~p~n", [Reason]),
+            throw({error, bad_parameters});
+        Collections ->
+            Records = lists:map(fun(Collection) ->
+                                        from_collection(Collection)
+                                end,
+                                Collections),
+            {ok, Records}
     end.
 
-delete(Sid) ->
-    case catch emongo:delete(?MONGO_POOL, "uce_presence", [{"id", Sid}]) of
-	{'EXIT', _} ->
-	    {error, bad_parameters};
-	_ ->
-	    {ok, deleted}
+get(Id) ->
+    case catch emongo:find_one(?MONGO_POOL, "uce_presence", [{"id", Id}]) of
+        {'EXIT', Reason} ->
+            ?ERROR_MSG("~p~n", [Reason]),
+            throw({error, bad_parameters});
+        [Collection] ->
+            {ok, from_collection(Collection)};
+        _ ->
+            throw({error, not_found})
+    end.
+
+delete(Id) ->
+    case catch emongo:delete(?MONGO_POOL, "uce_presence", [{"id", Id}]) of
+        {'EXIT', Reason} ->
+            ?ERROR_MSG("~p~n", [Reason]),
+            throw({error, bad_parameters});
+        _ ->
+            {ok, deleted}
     end.
 
 update(#uce_presence{}=Presence) ->
     case catch emongo:update_sync(?MONGO_POOL, "uce_presence",
-                                  [{"sid", Presence#uce_presence.sid}],
-                                  to_collection(Presence)) of
-	{'EXIT', _} ->
-	    {error, bad_parameters};
-	_ ->
-	    {ok, udpated}
+                                  [{"id", Presence#uce_presence.id}],
+                                  to_collection(Presence), false) of
+        {'EXIT', Reason} ->
+            ?ERROR_MSG("~p~n", [Reason]),
+            throw({error, bad_parameters});
+        _ ->
+            {ok, udpated}
     end.
 
 
 from_collection(Collection) ->
-    case utils:get(mongodb_helpers:collection_to_list(Collection), ["id", "uid", "metadata"]) of
-	[ESid, EUid, Metadata] ->
-	    #uce_presence{sid=ESid,
-			   uid=EUid,
-			   metadata=Metadata};
-	_ ->
-	    {error, bad_parameters}
+    case utils:get(mongodb_helpers:collection_to_list(Collection),
+                   ["id", "domain", "user", "auth", "last_activity", "metadata"]) of
+        [Id, Domain, User, Auth, LastActivity, Metadata] ->
+            #uce_presence{id=Id,
+                          domain=Domain,
+                          user={User, Domain},
+                          auth=Auth,
+                          last_activity=list_to_integer(LastActivity),
+                          metadata=Metadata};
+        _ ->
+            throw({error, bad_parameters})
     end.
 
-to_collection(#uce_presence{} = Presence) ->
-    [{"id", Presence#uce_presence.sid},
-     {"uid", Presence#uce_presence.uid},
-     {"metadata", Presence#uce_presence.metadata}].
+to_collection(#uce_presence{id=Id,
+                            domain=Domain,
+                            user={User, _},
+                            auth=Auth,
+                            last_activity=LastActivity,
+                            metadata=Metadata}) ->
+    [{"id", Id},
+     {"domain", Domain},
+     {"user", User},
+     {"auth", Auth},
+     {"last_activity", integer_to_list(LastActivity)},
+     {"metadata", Metadata}].

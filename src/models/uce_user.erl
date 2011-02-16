@@ -19,51 +19,52 @@
 
 -author('tbomandouki@af83.com').
 
--export([add/1, delete/1, update/4, update/1, list/0, get/1, exists/1]).
+-export([add/1, delete/1, update/1, list/1, get/1, exists/1]).
 
 -include("uce.hrl").
 -include("uce_models.hrl").
 
-add(#uce_user{} = User) ->
-    case ?MODULE:exists(User#uce_user.uid) of
-	true ->
-	    {error, conflict};
-	false ->
-	    ?DB_MODULE:add(User)
+add(#uce_user{id=Id} = User) ->
+    case exists(Id) of
+        true ->
+            throw({error, conflict});
+        false ->
+            ?DB_MODULE:add(User)
     end.
 
-delete(Uid) ->
-    case ?MODULE:get(Uid) of
-	{error, Reason} ->
-	    {error, Reason};
-	{ok, _} ->
-	    ?DB_MODULE:delete(Uid)
+delete(Id) ->
+    case exists(Id) of
+        true ->
+            ?DB_MODULE:delete(Id);
+        false ->
+            throw({error, not_found})
     end.
 
-update(Uid, Auth, Credential, Metadata) ->
-    ?MODULE:update(#uce_user{uid=Uid,
-			     auth=Auth,
-			     credential=Credential,
-			     metadata=Metadata}).
-
-update(#uce_user{} = User) ->
-    case ?MODULE:get(User#uce_user.uid) of
-	{error, Reason} ->
-	    {error, Reason};
-	{ok, _} ->
-	    ?DB_MODULE:update(User)
+update(#uce_user{id=Id} = User) ->
+    case ?MODULE:exists(Id) of
+        true ->
+            ?DB_MODULE:update(User);
+        false ->
+            throw({error, not_found})
     end.
 
-list() ->
-    ?DB_MODULE:list().
+list(Domain) ->
+    ?DB_MODULE:list(Domain).
 
-get(Uid) ->
-    ?DB_MODULE:get(Uid).
+get(Id) ->
+    ?DB_MODULE:get(Id).
 
-exists(Uid) ->
-    case ?MODULE:get(Uid) of
-	{error, _} ->
-	    false;
-	_ ->
-	    true
+exists(Id) ->
+    case Id of
+        {"", _} -> % all
+            true;
+        _ ->
+            case catch ?MODULE:get(Id) of
+                {error, not_found} ->
+                    false;
+                {error, Reason} ->
+                    throw({error, Reason});
+                _ ->
+                    true
+            end
     end.

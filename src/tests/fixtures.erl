@@ -22,79 +22,100 @@
 -export([setup/0, teardown/1]).
 
 setup() ->
-    setup_meetings(),
-    setup_users(),
-    setup_testers().
+    Domain = config:get(default_domain),
+    Port = config:get(port),
+    setup_meetings(Domain),
+    setup_users(Domain),
+    [Domain, "http://" ++ Domain ++ ":" ++ integer_to_list(Port) ++ "/api/0.3/", setup_testers(Domain)].
 
-teardown(_Testers) ->
+teardown([Domain, _, _Testers]) ->
     apply(list_to_atom(atom_to_list(config:get(db)) ++ "_db"), drop, []),
-    teardown_solr(),
+    teardown_solr(Domain),
     ok.
 
-setup_meetings() ->
+setup_meetings(Domain) ->
     Now = utils:now(),
-    uce_meeting:add(#uce_meeting{id=["testmeeting"],
-                                 metadata=[{"description", "Meeting"}],
-                                 start_date=Now,
-                                 end_date=?NEVER_ENDING_MEETING}),
-    uce_meeting:add(#uce_meeting{id=["closedmeeting"],
-                                 metadata=[{"description", "Meeting"}],
-                                 start_date=Now,
-                                 end_date=Now}),
-    uce_meeting:add(#uce_meeting{id=["upcomingmeeting"],
-                                 metadata=[{"description", "Meeting"}],
-                                 start_date=2569256203952,
-                                 end_date=?NEVER_ENDING_MEETING}),
-    uce_meeting:add(#uce_meeting{id=["testmeeting"],
-                                 metadata=[{"description", "Meeting"}],
-                                 start_date=Now,
-                                 end_date=?NEVER_ENDING_MEETING}),
+    catch uce_meeting:add(#uce_meeting{id={"testmeeting", Domain},
+                                       metadata=[{"description", "Meeting"}],
+                                       start_date=Now,
+                                       end_date=?NEVER_ENDING_MEETING}),
+    catch uce_meeting:add(#uce_meeting{id={"closedmeeting", Domain},
+                                       metadata=[{"description", "Meeting"}],
+                                       start_date=Now,
+                                       end_date=Now}),
+    catch uce_meeting:add(#uce_meeting{id={"upcomingmeeting", Domain},
+                                       metadata=[{"description", "Meeting"}],
+                                       start_date=2569256203952,
+                                       end_date=?NEVER_ENDING_MEETING}),
     ok.
 
-setup_users() ->
-    uce_user:add(#uce_user{uid="participant.user@af83.com",
-                           auth="password",
-                           credential="pwd"}),
-    uce_acl:add(#uce_acl{uid="participant.user@af83.com",
+setup_users(Domain) ->
+    ParticipantId = {"participant.user@af83.com", Domain},
+    catch uce_user:add(#uce_user{id=ParticipantId,
+                                 auth="password",
+                                 credential="pwd"}),
+    uce_acl:add(#uce_acl{user=ParticipantId,
                          action="add",
-                         object="presence"}),
-    uce_acl:add(#uce_acl{uid="participant.user@af83.com",
+                         object="presence",
+                         location={"", Domain}}),
+    uce_acl:add(#uce_acl{user=ParticipantId,
                          action="delete",
                          object="presence",
+                         location={"", Domain},
                          conditions=[{"user", "participant.user@af83.com"}]}),
-
-    uce_user:add(#uce_user{uid="anonymous.user@af83.com", auth="anonymous", credential=""}),
-    uce_acl:add(#uce_acl{uid="anonymous.user@af83.com",
+    
+    AnonymousId = {"anonymous.user@af83.com", Domain},
+    catch uce_user:add(#uce_user{id=AnonymousId,
+                                 auth="anonymous",
+                                 credential=""}),
+    uce_acl:add(#uce_acl{user=AnonymousId,
                          action="add",
-                         object="presence"}),
-    uce_acl:add(#uce_acl{uid="anonymous.user@af83.com",
+                         object="presence",
+                         location={"", Domain}}),
+    uce_acl:add(#uce_acl{user=AnonymousId,
                          action="delete",
                          object="presence",
+                         location={"", Domain},
                          conditions=[{"user", "anonymous.user@af83.com"}]}),
 
-    uce_user:add(#uce_user{uid="token.user@af83.com", auth="token", credential="4444"}),
+    catch uce_user:add(#uce_user{id={"token.user@af83.com", Domain},
+                                 auth="token",
+                                 credential="4444"}),
+    
+    catch uce_user:add(#uce_user{id={"user_2", Domain},
+                                 auth="password",
+                                 credential="pwd"}),
+    catch uce_user:add(#uce_user{id={"user_3", Domain},
+                                 auth="password",
+                                 credential="pwd"}),
+
     ok.
 
-setup_testers() ->
+setup_testers(Domain) ->
     RootUid = "root.user@af83.com",
-    {ok, created} = uce_user:add(#uce_user{uid=RootUid,
-                                           auth="password",
-                                           credential="pwd"}),
-    {ok, created} = uce_acl:add(#uce_acl{uid=RootUid,
+    RootId = {RootUid, Domain},
+    catch uce_user:add(#uce_user{id=RootId,
+                                 auth="password",
+                                 credential="pwd"}),
+    {ok, created} = uce_acl:add(#uce_acl{user=RootId,
                                          action="all",
-                                         object="all"}),
-    {ok, RootSid} = uce_presence:add(#uce_presence{uid=RootUid,
+                                         object="all",
+                                         location={"", Domain}}),
+    {ok, RootSid} = uce_presence:add(#uce_presence{user=RootId,
+                                                   domain=Domain,
                                                    auth="password",
                                                    metadata=[]}),
     UglyUid = "ugly.user@af83.com",
-    {ok, created} = uce_user:add(#uce_user{uid=UglyUid,
-                                           auth="password",
-                                           credential="pwd"}),
-    {ok, UglySid} = uce_presence:add(#uce_presence{uid=UglyUid,
+    UglyId = {UglyUid, Domain},
+    catch uce_user:add(#uce_user{id=UglyId,
+                                 auth="password",
+                                 credential="pwd"}),
+    {ok, UglySid} = uce_presence:add(#uce_presence{user=UglyId,
+                                                   domain=Domain,
                                                    auth="password",
                                                    metadata=[]}),
     [{RootUid, RootSid}, {UglyUid, UglySid}].
 
-teardown_solr() ->
-    uce_event_solr_search:delete("*:*"),
+teardown_solr(Domain) ->
+    uce_event_solr_search:delete(Domain, "*:*"),
     ok.

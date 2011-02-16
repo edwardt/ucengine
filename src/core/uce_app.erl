@@ -52,9 +52,7 @@ start(_, _) ->
 
 setup() ->
     save_pid(),
-    triggers:init(),
     setup_db(),
-    setup_acl(),
     setup_bricks(),
     setup_root(),
     setup_controllers(),
@@ -66,31 +64,17 @@ stop(State) ->
     remove_pid(),
     State.
 
-setup_acl() ->
-    [[triggers:add(#uce_trigger{location='_',
-                                type=Type,
-                                action={{uce_acl, trigger},
-                                        #uce_acl{object=Object,
-                                                 action=Action,
-                                                 conditions=Conditions}}})
-      || {Object, Action, Conditions} <- Rules] || {Type, Rules} <- config:get(acl)].
-
 setup_db() ->
     DBBackend = list_to_atom(atom_to_list(config:get(db)) ++ "_db"),
     DBBackend:init(config:get(config:get(db))).
 
 setup_bricks() ->
     lists:map(fun({Name, Token}) ->
-                      uce_user:add(#uce_user{uid=Name,
+                      catch uce_user:add(#uce_user{id={Name, config:get(default_domain)},
                                              auth="token",
                                              credential=Token,
                                              metadata=[]}),
-                                                % delete me
-                      uce_presence:add(#uce_presence{sid=Token,
-                                                     uid=Name,
-                                                     auth="token",
-                                                     metadata=[]}),
-                      uce_acl:add(#uce_acl{uid=Name,
+                      catch uce_acl:add(#uce_acl{user={Name, config:get(default_domain)},
                                            action="all",
                                            object="all",
                                            conditions=[]})
@@ -103,15 +87,14 @@ setup_root() ->
                    [none, none, none, []]) of
         [Uid, Auth, Credential, Metadata]
           when is_list(Uid) and is_list(Auth) and is_list(Credential) ->
-            uce_user:add(#uce_user{uid=Uid,
-                                   auth=Auth,
-                                   credential=Credential,
-                                   metadata=Metadata}),
-
-            uce_acl:add(#uce_acl{uid=Uid,
-                                 action="all",
-                                 object="all",
-                                 conditions=[]});
+            catch uce_user:add(#uce_user{id={Uid, config:get(default_domain)},
+                                         auth=Auth,
+                                         credential=Credential,
+                                         metadata=Metadata}),
+            catch uce_acl:add(#uce_acl{user={Uid, config:get(default_domain)},
+                                       action="all",
+                                       object="all",
+                                       conditions=[]});
         _ ->
             ?ERROR_MSG("Invalid or inexistent admin account~n", [])
     end.
@@ -147,7 +130,8 @@ setup_server() ->
     yaws_api:setconf(GConf#gconf{cache_refresh_secs=config:get(cache_refresh)}, SConfs).
 
 setup_session_timeout() ->
-    spawn(presence_controller, clean, []).
+%    spawn(presence_controller, clean, []).
+    nothing.
 
 save_pid() ->
     Pid = os:getpid(),

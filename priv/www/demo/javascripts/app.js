@@ -49,8 +49,8 @@ function sammyapp() {
                 if (err) {
                     return;
                 }
-                $("#logoPartner").html('<img src="images/' + result.logo +'" style="vertical-align: middle;" />');
-                infos = result;
+                $("#logoPartner").html('<img src="images/' + result.metadata.logo +'" style="vertical-align: middle;" />');
+                infos = result.metadata;
                 callback();
             });
         } else {
@@ -137,20 +137,21 @@ function sammyapp() {
         }
     });
     this.post('#/user/login', function() {
-        var uid      = this.params['email'];
-        var nickname = uid;
+        var name     = this.params['email'];
+        var nickname = name;
         var password = this.params['password'];
-        if (!uid) {
+        if (!name) {
             return false;
         }
         var that = this;
-        uce.presence.create(password, uid, nickname, function(err, result, xhr) {
-            if (err) {
-                return;
-            }
-            var presence = uce.attachPresence(result);
-            that.trigger('connected', {me:uid, presence:presence});
-        });
+        uce.presence.create(password, name, nickname,
+                            function(err, result, xhr) {
+                                if (err) {
+                                    return;
+                                }
+                                var presence = uce.attachPresence(result);
+                                that.trigger('connected', {me:name, presence:presence});
+                            });
     });
     this.get('#/user/logout', function() {
         var that = this;
@@ -174,8 +175,17 @@ function sammyapp() {
         }
         this.title('Meeting');
         var meeting = presence.presence.meeting(this.params['name']);
+
+        var that = this;
         meeting.join(function(err, result, xhr) {})
             .get(function(err, result, xhr) {
+
+                /* Make the user leave the meeting on window unload */
+                window.onbeforeunload = function() {
+                    presence.presence.meeting(that.params['name'])
+                        .leave(function(err, result, xhr) {});
+                };
+
                 var c = {meeting_name  : result.name,
                          meeting_desc  : result.metadata.description,
                          meeting_users : ""};
@@ -439,6 +449,10 @@ $.sammy("#meeting", function() {
             addWidget("#timer", 'timer', {ucemeeting: meeting, start: time});
         });
 
+        addWidget("#fileupload", 'fileupload', {ucemeeting: meeting,
+                                                  mode: 'reduced',
+                                                  dock: '#fileupload-dock'});
+
         addWidget("#filesharing", 'filesharing', {ucemeeting: meeting,
                                                   mode: 'reduced',
                                                   dock: '#filesharing-dock'});
@@ -496,7 +510,7 @@ $.sammy("#meeting", function() {
                     $('#whiteboard').whiteboard("clear");
                     $('#files').file("clear");
                     $('#chat').chat("clear");
-                    $('#filesharing').filesharing("clear");
+                    $('#fileupload').fileupload("clear");
                 }
                 $("#replay").replay({
                     date_start: start,
@@ -538,7 +552,7 @@ $.sammy("#meeting", function() {
         }
     });
 
-    this.get('#/meeting/:name', function(context) {});
+    this.get('#/meeting/:id', function(context) {});
 
     this.notFound = function() {
         // destroy all
@@ -555,7 +569,7 @@ $.sammy("#meeting", function() {
         $('#chat').chat("destroy");
         $('#whiteboard').whiteboard("destroy");
         $('#files').file("destroy");
-        $('#filesharing').filesharing("destroy");
+        $('#fileupload').fileupload("destroy");
         this.unload();
     };
 });

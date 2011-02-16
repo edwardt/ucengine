@@ -1,5 +1,5 @@
-.ui-chat .ui-chat-title { 
-    float: left; 
+.ui-chat .ui-chat-title {
+    float: left;
     margin: 0.1em 16px 0.2em 0;
 }
 
@@ -143,18 +143,24 @@
     padding: 5px 50px 5px 10px;
 }
 
+.ui-chat .ui-chat-container .ui-chat-message-date {
+    margin-right: 0.5em;
+}
 .ui-chat .ui-chat-container .ui-chat-message-from {
     font: bold 12px Helvetica;
-    display: block;}
-
+}
 
 .ui-chat .ui-chat-container .ui-chat-message-text {
     font: 12px Helvetica;
     display: block;
 }
 
+.ui-chat .ui-chat-container .ui-chat-message-text a {
+    text-decoration: underline;
+}
+
 .ui-chat form.ui-chat-message-form {
-    background-color: #EBEBEB;    
+    background-color: #EBEBEB;
     border-top: 1px solid #D7D7D7;
     padding-top: 3px;
     padding-bottom: 3px;

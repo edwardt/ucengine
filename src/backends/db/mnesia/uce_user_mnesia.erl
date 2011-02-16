@@ -22,62 +22,72 @@
 -export([init/0, drop/0]).
 
 -export([add/1,
-	 delete/1,
-	 update/1,
-	 list/0,
-	 get/1]).
+         delete/1,
+         update/1,
+         list/1,
+         get/1]).
 
 -include("uce.hrl").
 
 init() ->
     mnesia:create_table(uce_user,
-			[{disc_copies, [node()]},
-			 {type, set},
-			 {attributes, record_info(fields, uce_user)}]).
+                        [{disc_copies, [node()]},
+                         {type, set},
+                         {attributes, record_info(fields, uce_user)}]).
 
 add(#uce_user{} = User) ->
     case mnesia:transaction(fun() ->
-			       mnesia:write(User)
-		       end) of
-	{atomic, _} ->
-	    {ok, created};
-	{aborted, Reason} ->
-	    {error, Reason}
+                                    mnesia:write(User)
+                            end) of
+        {atomic, _} ->
+            {ok, created};
+        {aborted, _} ->
+            throw({error, bad_parameters})
     end.
 
-delete(EUid) ->
+delete(Id) ->
     case mnesia:transaction(fun() ->
-				    mnesia:delete({uce_user, EUid})
-			    end) of
-	{atomic, ok} ->
-	    {ok, deleted};
-	{aborted, Reason} ->
-	    {error, Reason}
+                                    mnesia:delete({uce_user, Id})
+                            end) of
+        {atomic, ok} ->
+            {ok, deleted};
+        {aborted, _} ->
+            throw({error, bad_parameters})
     end.
 
 update(#uce_user{} = User) ->
     case mnesia:transaction(fun() ->
-			       mnesia:write(User)
-		       end) of
-	{atomic, _} ->
-	    {ok, updated};
-	{aborted, Reason} ->
-	    {error, Reason}
+                                    mnesia:write(User)
+                            end) of
+        {atomic, _} ->
+            {ok, updated};
+        {aborted, _} ->
+            throw({error, bad_parameters})
     end.
 
-list() ->
-    {ok, ets:tab2list(uce_user)}.
-
-get(EUid) ->
+list(Domain) ->
     case mnesia:transaction(fun() ->
-				    mnesia:read(uce_user, EUid)
-			    end) of
-	{atomic, [Record]} ->
-	    {ok, Record};
-	{atomic, _} ->
-	    {error, not_found};
-	{aborted, Reason} ->
-	    {error, Reason}
+                                    mnesia:match_object(#uce_user{id={'_', Domain},
+                                                                  auth='_',
+                                                                  credential='_',
+                                                                  metadata='_'})
+                            end) of
+        {atomic, Records} ->
+            {ok, Records};
+        {aborted, _} ->
+            throw({error, bad_parameters})
+    end.
+
+get(Id) ->
+    case mnesia:transaction(fun() ->
+                                    mnesia:read(uce_user, Id)
+                            end) of
+        {atomic, [Record]} ->
+            {ok, Record};
+        {atomic, _} ->
+            throw({error, not_found});
+        {aborted, _} ->
+            throw({error, bad_parameters})
     end.
 
 drop() ->
