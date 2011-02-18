@@ -28,7 +28,7 @@
          get/1,
          delete/1,
          update/1,
-         all/1]).
+         all/0]).
 
 -include("uce.hrl").
 
@@ -54,6 +54,7 @@ list(User) ->
                                                       user=User,
                                                       domain='_',
                                                       auth='_',
+                                                      timeout='_',
                                                       last_activity='_',
                                                       resource='_',
                                                       metadata='_'})
@@ -66,21 +67,12 @@ list(User) ->
             throw({error, bad_parameters})
     end.
 
-all(Domain) ->
-    case mnesia:transaction(fun() ->
-				    mnesia:match_object(#uce_presence{id='_',
-                                                      domain=Domain,
-                                                      user='_',
-                                                      auth='_',
-                                                      last_activity='_',
-                                                      resource='_',
-                                                      metadata='_'})
-                            end) of
-        {atomic, []} ->
-            {ok, []};
-        {atomic, Records} ->
+all() ->
+    case catch ets:tab2list(uce_presence) of
+        Records when is_list(Records) ->
             {ok, Records};
-        {aborted, _} ->
+        Error ->
+            ?ERROR_MSG("uce_presence:all: ~p~n", [Error]),
             throw({error, bad_parameters})
     end.
 

@@ -28,6 +28,7 @@ $.uce.widget("whiteboard", {
             var dock = $('<a>')
                 .attr('class', 'ui-dock-button')
                 .attr('href', '#')
+                .attr('title', this.options.title)
                 .button({
                     text: false,
                     icons: {primary: "ui-icon-image"}
@@ -51,7 +52,9 @@ $.uce.widget("whiteboard", {
 
         var toolbar = $('<div>').attr('class', 'ui-whiteboard-toolbar');
 
-        var brush = $('<span>')
+        this._tools = {};
+
+        this._tools.brush = $('<span>')
             .attr('class', 'ui-whiteboard ui-toolbar-button ui-button-left')
             .button({
                 text: false,
@@ -59,11 +62,11 @@ $.uce.widget("whiteboard", {
                     primary: "ui-icon-pencil"
                 }
             }).click(function() {
+                that._selectTool(this);
                 that._changeTool('pencil');
-            });
-        brush.appendTo(toolbar);
+            }).appendTo(toolbar);
 
-        var rectangle = $('<span>')
+        this._tools.rectangle = $('<span>')
             .attr('class', 'ui-whiteboard ui-toolbar-button ui-button-left')
             .button({
                 text: false,
@@ -71,11 +74,11 @@ $.uce.widget("whiteboard", {
                     primary: "ui-whiteboard-icon-rectangle"
                 }
             }).click(function() {
+                that._selectTool(this);
                 that._changeTool('rectangle');
-            });
-        rectangle.appendTo(toolbar);
+            }).appendTo(toolbar);
 
-        var circle = $('<span>')
+        this._tools.circle = $('<span>')
             .attr('class', 'ui-whiteboard ui-toolbar-button ui-button-left')
             .button({
                 text: false,
@@ -83,11 +86,13 @@ $.uce.widget("whiteboard", {
                     primary: "ui-whiteboard-icon-circle"
                 }
             }).click(function() {
+                that._selectTool(this);
                 that._changeTool('circle');
-            });
-        circle.appendTo(toolbar);
+            }).appendTo(toolbar);
 
-        var clear = $('<span>')
+        this._selectTool(this._tools.brush);
+
+        this._tools.clear = $('<span>')
             .attr('class', 'ui-whiteboard ui-toolbar-button ui-button-right')
             .button({
                 text: false,
@@ -96,19 +101,23 @@ $.uce.widget("whiteboard", {
                 }
             }).click(function() {
                 that._clear();
-            });
-        clear.appendTo(toolbar);
+            }).appendTo(toolbar);
 
+        this._colors = [];
         $.each(this.options.colors, function(index, hex) {
             var color = $('<span>')
                 .attr('class', 'ui-whiteboard ui-toolbar-button ui-button-right ui-button-color')
                 .button()
                 .click(function() {
                     that.color = hex;
+                    $.each(that._colors, function(index, color) {
+                        color.removeClass('ui-state-highlight');
+                    });
+                    $(this).addClass('ui-state-highlight');
                 })
                 .css('background-color', hex);
-
             color.appendTo(toolbar);
+            that._colors.push(color);
         });
 
         toolbar.appendTo(this._content);
@@ -233,6 +242,13 @@ $.uce.widget("whiteboard", {
         this.canvas.unbind("mouseout");
     },
 
+    _selectTool: function(tool) {
+        this._tools.brush.removeClass('ui-state-highlight');
+        this._tools.rectangle.removeClass('ui-state-highlight');
+        this._tools.circle.removeClass('ui-state-highlight');
+        $(tool).addClass('ui-state-highlight');
+    },
+
     _changeTool: function(tool) {
         this.tool = tool;
     },
@@ -310,6 +326,7 @@ $.uce.widget("whiteboard", {
     destroy: function() {
         this.element.find('*').remove();
         this.element.removeClass('ui-widget ui-whiteboard');
+        $(this.options.dock).find('*').remove();
         $.Widget.prototype.destroy.apply(this, arguments); // default destroy
     }
 });

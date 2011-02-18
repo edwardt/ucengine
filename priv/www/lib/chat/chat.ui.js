@@ -121,6 +121,7 @@ $.uce.widget("chat", {
             this._dock = dock = $('<a>')
                 .attr('class', 'ui-dock-button')
                 .attr('href', '#')
+                .attr('title', this.options.title)
                 .button({
                     text: false,
                     icons: {primary: "ui-icon-comment"}
@@ -409,7 +410,7 @@ $.uce.widget("chat", {
             .appendTo(message);
 
         // Change http URIs into links
-        var httpLinks = /(http:\/\/[^ ]+)/;
+        var httpLinks = /(https?:\/\/[^ \)\"]+)/g;
         text.html(text.html().replace(httpLinks, '<a href="$1">$1</a>'));
 
         message.appendTo(conversationList);
@@ -460,6 +461,7 @@ $.uce.widget("chat", {
     destroy: function() {
         this.element.find('*').remove();
         this.element.removeClass('ui-chat ui-widget');
+        $(this.options.dock).find('*').remove();
         $.Widget.prototype.destroy.apply(this, arguments); // default destroy
     }
 });

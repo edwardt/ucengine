@@ -31,7 +31,7 @@ $.uce.widget("video", {
     labels : {
         "button.publish"     : "Publish",
         "button.stoppublish" : "Stop publish",
-        "content.nostream"   : "No stream is available"
+        "content.nostream"   : "No stream available"
     },
     _getFlashSrc: function() {
         if (this._publish)
@@ -56,6 +56,7 @@ $.uce.widget("video", {
             var dock = $('<a>')
                 .attr('class', 'ui-dock-button')
                 .attr('href', '#')
+                .attr('title', this.options.title)
                 .button({
                     text: false,
                     icons: {primary: "ui-icon-person"}
@@ -173,6 +174,7 @@ $.uce.widget("video", {
     destroy: function() {
         this.element.children().remove();
         this.element.removeClass('ui-widget ui-video');
+        $(this.options.dock).children().remove();
         $.Widget.prototype.destroy.apply(this, arguments); // default destroy
     }
 });

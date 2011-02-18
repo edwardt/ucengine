@@ -26,7 +26,7 @@
          get/1,
          delete/1,
          update/1,
-         all/1]).
+         all/0]).
 
 -include("uce.hrl").
 -include("mongodb.hrl").
@@ -54,8 +54,8 @@ list({User, Domain}) ->
             {ok, Records}
     end.
 
-all(Domain) ->
-    case catch emongo:find_all(?MONGO_POOL, "uce_presence", [{"domain", Domain}]) of
+all() ->
+    case catch emongo:find_all(?MONGO_POOL, "uce_presence", []) of
         {'EXIT', Reason} ->
             ?ERROR_MSG("~p~n", [Reason]),
             throw({error, bad_parameters});
@@ -101,13 +101,14 @@ update(#uce_presence{}=Presence) ->
 
 from_collection(Collection) ->
     case utils:get(mongodb_helpers:collection_to_list(Collection),
-                   ["id", "domain", "user", "auth", "last_activity", "metadata"]) of
-        [Id, Domain, User, Auth, LastActivity, Metadata] ->
+                   ["id", "domain", "user", "auth", "last_activity", "timeout", "metadata"]) of
+        [Id, Domain, User, Auth, LastActivity, Timeout, Metadata] ->
             #uce_presence{id=Id,
                           domain=Domain,
                           user={User, Domain},
                           auth=Auth,
                           last_activity=list_to_integer(LastActivity),
+                          timeout=list_to_integer(Timeout),
                           metadata=Metadata};
         _ ->
             throw({error, bad_parameters})
@@ -118,10 +119,12 @@ to_collection(#uce_presence{id=Id,
                             user={User, _},
                             auth=Auth,
                             last_activity=LastActivity,
+                            timeout=Timeout,
                             metadata=Metadata}) ->
     [{"id", Id},
      {"domain", Domain},
      {"user", User},
      {"auth", Auth},
      {"last_activity", integer_to_list(LastActivity)},
+     {"timeout", integer_to_list(Timeout)},
      {"metadata", Metadata}].

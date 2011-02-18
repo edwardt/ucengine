@@ -118,9 +118,10 @@ $.uce.widget("filesharing", {
             this._dock = dock = $('<a>')
                 .attr('class', 'ui-dock-button')
                 .attr('href', '#')
+                .attr('title', this.options.title)
                 .button({
                     text: false,
-                    icons: {primary: "ui-icon-document"}
+                    icons: {primary: "ui-icon-transferthick-e-w"}
                 }).click(function() {
                     that.element.effect('bounce');
                     $(window).scrollTop(that.element.offset().top);
@@ -206,11 +207,22 @@ $.uce.widget("filesharing", {
             .text(this._shared.file.name);
         this.element.find('.ui-selector-current')
             .text(this._shared.page + 1);
-        this.element.find('.ui-selector-total')
-            .text(this._shared.file.pages.length);
+
         var pageImg = this.element.find('.ui-filesharing-preview-page img');
-        var src = this.options.ucemeeting
-            .getFileDownloadUrl(this._shared.file.pages[this._shared.page]);
+
+        if (this._shared.file.pages.length > 0) {
+            this.element.find('.ui-selector-total')
+                .text(this._shared.file.pages.length);
+            var src = this.options.ucemeeting
+                .getFileDownloadUrl(this._shared.file.pages[this._shared.page]);
+        }
+        else {
+            this.element.find('.ui-selector-total')
+                .text("1");
+            var src = this.options.ucemeeting
+                .getFileDownloadUrl(this._shared.file.metadata.id);
+        }
+
         pageImg.attr('src', src);
     },
 
@@ -246,18 +258,12 @@ $.uce.widget("filesharing", {
         if (!this._shared) {
             return;
         }
-        if (this._shared.master != event.from) {
-            return;
-        }
         this._shared.page = parseInt(event.metadata.page);
         this._refreshSharing();
     },
 
     _handleShareStopEvent: function(event) {
         if (!this._shared) {
-            return;
-        }
-        if (this._shared.master != event.from) {
             return;
         }
         this.hideShare();
@@ -267,6 +273,7 @@ $.uce.widget("filesharing", {
     destroy: function() {
         this.element.find('*').remove();
         this.element.removeClass('ui-widget ui-filesharing');
+        $(this.options.dock).find('*').remove();
         $.Widget.prototype.destroy.apply(this, arguments); // default destroy
     }
 });

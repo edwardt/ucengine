@@ -6,7 +6,6 @@
         <link href="stylesheets/ui-lightness/jquery-ui-1.8.4.custom.css" media="screen" rel="stylesheet" type="text/css" />
         <link href="../lib/timer/timer.css" media="screen" rel="stylesheet" type="text/css" />
         <link href="../lib/chat/chat.css" media="screen" rel="stylesheet" type="text/css" />
-        <link href="../lib/file/file.css" media="screen" rel="stylesheet" type="text/css" />
         <link href="../lib/file_upload/file_upload.css" media="screen" rel="stylesheet" type="text/css" />
         <link href="../lib/video/video.css" media="screen" rel="stylesheet" type="text/css" />
         <link href="../lib/search/search.css" media="screen" rel="stylesheet" type="text/css" />
@@ -27,12 +26,12 @@
         <script type="text/javascript" src="../lib/whiteboard/whiteboard.js"></script>
 
         <script type="text/javascript" src="../lib/jquery.tmpl.min.js"></script>
+        <script type="text/javascript" src="../lib/jquery.strftime-minified.js"></script>
 
         <script type="text/javascript" src="../lib/uce.js"></script>
         <script type="text/javascript" src="../lib/ucewidget.js"></script>
         <script type="text/javascript" src="../lib/video/video.ui.js"></script>
         <script type="text/javascript" src="../lib/whiteboard/whiteboard.ui.js"></script>
-        <script type="text/javascript" src="../lib/file/file.ui.js"></script>
         <script type="text/javascript" src="../lib/file_upload/file_upload.ui.js"></script>
         <script type="text/javascript" src="../lib/replay/replay.ui.js"></script>
         <script type="text/javascript" src="../lib/search/search.ui.js"></script>
@@ -56,9 +55,8 @@
 
         <script type="text/javascript">
             var meeting = uce.attachPresence({}).meeting('demo');
-            var widgets = ['video', 'player', 'file', 'replay',
-                           'timer', 'search',
-                           'fileupload', 'chat'];
+            var widgets = ['video', 'player', 'replay',
+                           'timer', 'search', 'fileupload', 'chat'];
             $(widgets).each(function(index, widget) {
                $('<h2>').text(widget).appendTo($('.widgets'));
                $('<div>')[widget]({ucemeeting: meeting})
