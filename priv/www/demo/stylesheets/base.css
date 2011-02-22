@@ -411,6 +411,7 @@ footer p {
     padding: 5px;
     background: #A9A9A9;
     text-align: center;
+    display: none;
 }
 #content section .block.info .block-content p.quit a {
     font: normal 12px/20px Helvetica;
