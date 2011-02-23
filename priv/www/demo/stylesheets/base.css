@@ -62,6 +62,10 @@ header .page {
     position: relative;
 }
 
+header .page .signout {
+    display: none;
+}
+
 header ul li {
     display: inline-block;
     height: 100px;
