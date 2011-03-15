@@ -13,7 +13,7 @@ $.uce.widget("chat", {
         "twitter.tweet.new"      : "_handleTweet",
         "internal.roster.add"    : "_handleJoin",
         "internal.roster.delete" : "_handleLeave",
-        "chat.translation.new"   : "_handleMessage",
+        "chat.translation.new"   : "_handleTranslation",
         "chat.message.new"       : "_handleMessage"
     },
     _create: function() {
@@ -62,7 +62,7 @@ $.uce.widget("chat", {
             .appendTo(selectors);
 
         /* create form to add hashtags */
-        this._hashtagForm = form = $('<form>')
+        this._hashtagForm = $('<form>')
             .attr({'action': '#', 'method': 'post', 'class': 'ui-chat-hashtag-form'});
 
         var dash = $('<span>').text("#").appendTo(this._hashtagForm);
@@ -94,16 +94,23 @@ $.uce.widget("chat", {
             .attr('class', 'ui-chat-flags');
 
         /* create message block for each language */
+        this._flags = [];
         $.each(this.options.langs, function(i, lang) {
             var flag = $('<span>')
-                .attr('class', 'ui-chat-flag')
+                .addClass('ui-chat-flag')
+                .addClass('ui-chat-lang-' + lang)
                 .button({
                     text: false,
-                    icons: {primary: 'ui-chat-flag-' + lang}
+                    icons: {primary: 'ui-chat-flag-icon'}
                 })
                 .click(function(e) {
                     that._showConversation('all', lang);
+                    $.each(that._flags, function(index, flag) {
+                        flag.removeClass('ui-state-highlight');
+                    });
+                    $(this).addClass('ui-state-highlight');
                 });
+            that._flags.push(flag);
             flag.appendTo(flags);
 
             that._addConversation("all", lang);
@@ -116,9 +123,13 @@ $.uce.widget("chat", {
         this._addHeader(this.options.title, {left: this.options.buttons.left,
                                              right: rightButtons});
 
+        /* set highlight to default flag */
+        this.element.find('.ui-chat-flag.ui-chat-lang-' + this.options.lang)
+            .addClass('ui-state-highlight');
+
         /* create dock */
         if (this.options.dock) {
-            this._dock = dock = $('<a>')
+            this._dock = $('<a>')
                 .attr('class', 'ui-dock-button')
                 .attr('href', '#')
                 .attr('title', this.options.title)
@@ -227,6 +238,13 @@ $.uce.widget("chat", {
         this._updateHashtags();
     },
 
+    _handleTranslation: function(event) {
+        // Use the 'from' of the metadata as the from of the message
+        event.from = event.metadata.from;
+
+        this._handleMessage(event);
+    },
+
     _handleMessage: function(event) {
         if (!event.metadata.lang || !event.metadata.text) {
             return;
@@ -311,7 +329,7 @@ $.uce.widget("chat", {
             $(container).removeClass('ui-chat-current');
         });
     },
-    
+
     _addConversation: function(name, language) {
         var conversation = this._addContainer('conversation:' + name + ":" + language);
 

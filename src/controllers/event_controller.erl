@@ -25,72 +25,60 @@
 init() ->
     [#uce_route{method='POST',
                 regexp="/event/?([^/]+)?",
-                callbacks=[{?MODULE, add,
-                            ["uid", "sid", "type", "to", "parent", "metadata"],
-                            [required, required, required, "", "", []],
-                            [string, string, string, string, string, dictionary]}]},
+                callback={?MODULE, add,
+                          [{"uid", required, string},
+                           {"sid", required, string},
+                           {"type", required, string},
+                           {"to", "", string},
+                           {"parent", "", string},
+                           {"metadata", [], dictionary}]}},
 
      #uce_route{method='GET',
                 regexp="/event/([^/]+)/([^/]+)",
-                callbacks=[{?MODULE, get,
-                            ["uid", "sid"],
-                            [required, required],
-                            [string, string]}]},     
+                callback={?MODULE, get,
+                          [{"uid", required, string},
+                           {"sid", required, string}]}},
 
      #uce_route{method='GET',
                 regexp="/event/?([^/]+)?",
-                callbacks=[{?MODULE, list,
-                            ["uid",
-                             "sid",
-                             "search",
-                             "type",
-                             "from",
-                             "start",
-                             "end",
-                             "count",
-                             "page",
-                             "order",
-                             "parent",
-                             "_async"],
-                            [required, required, '_', '_', "", 0, infinity, infinity, 1, asc, '_', "no"],
-                            [string,
-                             string,
-                             [string, atom],
-                             [string, atom],
-                             string,
-                             integer,
-                             [integer, atom],
-                             [integer, atom],
-                             integer,
-                             atom,
-                             [string, atom],
-                             string]}]}].
-
+                callback={?MODULE, list,
+                          [{"uid", required, string},
+                           {"sid", required, string},
+                           {"search", "", string},
+                           {"type", "", string},
+                           {"from", "", string},
+                           {"start", 0, integer},
+                           {"end", infinity, [integer, atom]},
+                           {"count", infinity, [integer, atom]},
+                           {"page", 1, integer},
+                           {"order", asc, atom},
+                           {"parent", "", string},
+                           {"_async", "no", string}]}}].
 
 add(Domain, [], Params, Arg) ->
     ?MODULE:add(Domain, [""], Params, Arg);
 add(Domain, [Meeting], [Uid, Sid, Type, To, Parent, Metadata], _) ->
-    {ok, true} = uce_presence:assert({Uid, Domain}, Sid),
-    {ok, true} = uce_acl:assert({Uid, Domain}, "event", "add", {Meeting, Domain}, [{"type", Type},
-                                                                                   {"to", To}]),
-    {ok, Id} = uce_event:add(#uce_event{domain=Domain,
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "event", "add", {Meeting, Domain}, [{"type", Type},{"to", To}]),
+    {ok, Id} = uce_event:add(Domain,
+                             #uce_event{domain=Domain,
                                         location={Meeting, Domain},
                                         from={Uid, Domain},
                                         type=Type,
                                         to={To, Domain},
                                         parent=Parent,
                                         metadata=Metadata}),
-    json_helpers:created(Id).
+    json_helpers:created(Domain, Id).
 
 get(Domain, [_, Id], [Uid, Sid], _) ->
-    {ok, true} = uce_presence:assert({Uid, Domain}, Sid),
-    {ok, true} = uce_acl:assert({Uid, Domain}, "event", "get", {"", ""}, [{"id", Id}]),
-    {ok, #uce_event{to=To} = Event} = uce_event:get(Id),
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "event", "get", {"", ""}, [{"id", Id}]),
+    {ok, #uce_event{to=To} = Event} = uce_event:get(Domain, Id),
     case To of
         {"", _} ->
-            json_helpers:json(event_helpers:to_json(Event));
+            json_helpers:json(Domain, event_helpers:to_json(Event));
         {Uid, Domain} ->
-            json_helpers:json(event_helpers:to_json(Event));
+            json_helpers:json(Domain, event_helpers:to_json(Event));
         _ ->
             throw({error, unauthorized})
     end.
@@ -98,48 +86,44 @@ get(Domain, [_, Id], [Uid, Sid], _) ->
 list(Domain, [], Params, Arg) ->
     ?MODULE:list(Domain, [""], Params, Arg);
 list(Domain, [Meeting],
-     [Uid, Sid, Search, Type, From, Start, End, Count, Page, Order, Parent, Async], Arg) ->
+     [Uid, Sid, Search, Type, From, DateStart, DateEnd, Count, Page, Order, Parent, Async], Arg) ->
 
-    {ok, true} = uce_presence:assert({Uid, Domain}, Sid),
-    {ok, true} = uce_acl:assert({Uid, Domain}, "event", "list", {Meeting, Domain}, [{"from", From}]),
-    Types = case Type of
-                '_' ->
-                    ['_'];
-                _ ->
-                    string:tokens(Type, ",")
-            end,
-    Keywords = case Search of
-                   '_' ->
-                       '_';
-                   _ ->
-                       string:tokens(Search, " ")
-               end,
-    case uce_event:list({Meeting, Domain},
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "event", "list", {Meeting, Domain}, [{"from", From}]),
+
+    Keywords = string:tokens(Search, ","),
+    Types = string:tokens(Type, ","),
+
+    Start = paginate:index(Count, 0, Page),
+    case uce_event:list(Domain,
+                        {Meeting, Domain},
                         Keywords,
                         {From, Domain},
                         Types,
                         {Uid, Domain},
+                        DateStart,
+                        DateEnd,
+                        Parent,
                         Start,
-                        End,
-                        Parent) of
+                        Count,
+                        Order) of
         {ok, []} ->
             case Async of
                 "no" ->
-                    json_helpers:json(event_helpers:to_json([]));
+                    json_helpers:json(Domain, event_helpers:to_json([]));
                 "lp" ->
-                    uce_async_lp:wait({Meeting, Domain},
+                    uce_async_lp:wait(Domain,
+                                      {Meeting, Domain},
                                       Keywords,
                                       {From, Domain},
                                       Types,
                                       {Uid, Domain},
-                                      Start,
-                                      End,
+                                      DateStart,
+                                      DateEnd,
                                       Parent,
                                       Arg#arg.clisock);
                 _ ->
                     {error, bad_parameters}
             end;
-        {ok, Events} ->
-            EventPage = helpers:paginate(event_helpers:sort(Events), Count, Page, Order),
-            json_helpers:json(event_helpers:to_json(EventPage))
+        {ok, Events} -> json_helpers:json(Domain, event_helpers:to_json(Events))
     end.

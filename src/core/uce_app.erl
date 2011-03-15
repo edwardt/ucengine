@@ -22,6 +22,8 @@
 
 -export([start/0]).
 
+-compile(export_all).
+
 %% application callback
 -export([start/2, stop/1]).
 
@@ -41,8 +43,7 @@ start(_, _) ->
 
     Arguments = init:get_arguments(),
     [[ConfigurationPath]] = utils:get(Arguments, [c], [["etc/uce.cfg"]]),
-    ok = config:start_link(ConfigurationPath),
-    case uce_sup:start_link() of
+    case uce_sup:start_link(ConfigurationPath) of
         {ok, Pid} ->
             setup(),
             {ok, Pid};
@@ -52,9 +53,7 @@ start(_, _) ->
 
 setup() ->
     save_pid(),
-    setup_db(),
-    setup_bricks(),
-    setup_root(),
+    setup_search(),
     setup_controllers(),
     setup_server(),
     ok.
@@ -63,39 +62,15 @@ stop(State) ->
     remove_pid(),
     State.
 
-setup_db() ->
-    DBBackend = list_to_atom(atom_to_list(config:get(db)) ++ "_db"),
-    DBBackend:init(config:get(config:get(db))).
-
-setup_bricks() ->
-    lists:map(fun({Name, Token}) ->
-                      catch uce_user:add(#uce_user{id={Name, config:get(default_domain)},
-                                             auth="token",
-                                             credential=Token,
-                                             metadata=[]}),
-                      catch uce_acl:add(#uce_acl{user={Name, config:get(default_domain)},
-                                           action="all",
-                                           object="all",
-                                           conditions=[]})
-              end,
-              config:get(bricks)).
-
-setup_root() ->
-    case utils:get(config:get(admin),
-                   [uid, auth, credential, metadata],
-                   [none, none, none, []]) of
-        [Uid, Auth, Credential, Metadata]
-          when is_list(Uid) and is_list(Auth) and is_list(Credential) ->
-            catch uce_user:add(#uce_user{id={Uid, config:get(default_domain)},
-                                         auth=Auth,
-                                         credential=Credential,
-                                         metadata=Metadata}),
-            catch uce_acl:add(#uce_acl{user={Uid, config:get(default_domain)},
-                                       action="all",
-                                       object="all",
-                                       conditions=[]});
+setup_search() ->
+    case config:get(search) of
+        solr ->
+            ChildSpec = {uce_solr_commiter,
+                         {uce_solr_commiter, start_link, []},
+                         permanent, brutal_kill, worker, [uce_solr_commiter]},
+            {ok, _Pid} = supervisor:start_child(uce_sup, ChildSpec);
         _ ->
-            ?ERROR_MSG("Invalid or inexistent admin account~n", [])
+            []
     end.
 
 setup_controllers() ->
@@ -110,21 +85,29 @@ setup_controllers() ->
                    file_controller,
                    acl_controller,
                    time_controller,
-                   infos_controller
-                  ]).
+                   infos_controller,
+                   search_controller]).
 
 setup_server() ->
-    yaws:start_embedded(config:get(root),
-                        [{servername, "ucengine"},
+    [{DefaultHost, _Config}|Hosts] = config:get(hosts),
+    yaws:start_embedded(config:get(DefaultHost, root),
+                        [{servername, DefaultHost},
                          {listen, {0,0,0,0}},
                          {port, config:get(port)},
-                         {appmods, [{"/api/" ++ config:get(version), appmod_uce}]}],
+                         {appmods, [{"/api/" ++ ?VERSION, appmod_uce}]}],
                         [{auth_log, false},
                          {access_log, false},
                          {copy_errlog, false},
                          {debug, false},
                          {copy_error_log, false},
                          {max_connections, nolimit}]),
+    lists:foreach(fun({Vhost, _}) ->
+                          yaws:add_server(config:get(Vhost, root),
+                                          [{servername, Vhost},
+                                           {listen, {0,0,0,0}},
+                                           {port, config:get(port)},
+                                           {appmods, [{"/api/" ++ ?VERSION, appmod_uce}]}])
+                  end, Hosts),
     {ok, GConf, SConfs} = yaws_api:getconf(),
     yaws_api:setconf(GConf#gconf{cache_refresh_secs=config:get(cache_refresh)}, SConfs).
 
@@ -135,7 +118,6 @@ save_pid() ->
     io:fwrite(PidFileId, "~s", [Pid]),
     file:close(PidFileId),
     ok.
-
 
 remove_pid() ->
     PidFile = config:get(pidfile),

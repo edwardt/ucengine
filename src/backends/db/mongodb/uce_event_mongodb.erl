@@ -22,14 +22,14 @@
 -behaviour(gen_uce_event).
 
 -export([add/1,
-         get/1,
+         get/2,
          list/6]).
 
 -include("uce.hrl").
 -include("mongodb.hrl").
 
-add(#uce_event{} = Event) ->
-    case catch emongo:insert_sync(?MONGO_POOL, "uce_event", to_collection(Event)) of
+add(#uce_event{domain=Domain} = Event) ->
+    case catch emongo:insert_sync(Domain, "uce_event", to_collection(Event)) of
         {'EXIT', Reason} ->
             ?ERROR_MSG("~p~n", [Reason]),
             throw({error, bad_parameters});
@@ -37,8 +37,8 @@ add(#uce_event{} = Event) ->
             {ok, Event#uce_event.id}
     end.
 
-get(Id) ->
-    case catch emongo:find_one(?MONGO_POOL, "uce_event", [{"id", Id}]) of
+get(Domain, Id) ->
+    case catch emongo:find_one(Domain, "uce_event", [{"id", Id}]) of
         {'EXIT', Reason} ->
             ?ERROR_MSG("~p~n", [Reason]),
             throw({error, bad_parameters});
@@ -48,11 +48,11 @@ get(Id) ->
             throw({error, not_found})
     end.
 
-list(Location, From, Type, Start, End, Parent) ->
+list({_M, Domain}=Location, From, Type, Start, End, Parent) ->
     SelectLocation = case Location of
-                         {"", _} ->
+                         {"", Domain} ->
                              [];
-                         {Meeting, _} ->
+                         {Meeting, Domain} ->
                              [{"meeting", Meeting}]
                      end,
     SelectFrom = case From of
@@ -61,20 +61,20 @@ list(Location, From, Type, Start, End, Parent) ->
                      {Uid, _} ->
                          [{"from", Uid}]
                  end,
-    SelectType = if
-                     Type == '_' ->
+    SelectTypes = if
+                     Type == [] ->
                          [];
                      true ->
-                         [{"type", Type}]
+                         [{"type", [{in, Type}]}]
                  end,
     SelectParent = if
-                       Parent == '_' ->
+                       Parent == "" ->
                            [];
                        true ->
-                           [{"parent", Type}]
+                           [{"parent", Parent}]
                    end,
     SelectTime = if
-                     Start == 0, End == infinity -> 
+                     Start == 0, End == infinity ->
                          [];
                      Start /= 0, End == infinity ->
                          [{"datetime", [{'>=', Start}]}];
@@ -89,10 +89,10 @@ list(Location, From, Type, Start, End, Parent) ->
     Events = lists:map(fun(Collection) ->
                                from_collection(Collection)
                        end,
-                       emongo:find_all(?MONGO_POOL,"uce_event",
+                       emongo:find_all(Domain,"uce_event",
                                        SelectLocation ++
                                            SelectFrom ++
-                                           SelectType ++
+                                           SelectTypes ++
                                            SelectParent ++
                                            SelectTime,
                                        [{orderby, [{"this.datetime", asc}]}])),
@@ -100,8 +100,8 @@ list(Location, From, Type, Start, End, Parent) ->
 
 from_collection(Collection) ->
     case utils:get(mongodb_helpers:collection_to_list(Collection),
-		  ["id", "domain", "meeting", "from", "metadata", "datetime", "type", "parent", "to"]) of
-	[Id, Domain, Meeting, From, Metadata, Datetime, Type, Parent, To] ->
+                  ["id", "domain", "meeting", "from", "metadata", "datetime", "type", "parent", "to"]) of
+        [Id, Domain, Meeting, From, Metadata, Datetime, Type, Parent, To] ->
             #uce_event{id=Id,
                        domain=Domain,
                        datetime=Datetime,
@@ -118,7 +118,7 @@ from_collection(Collection) ->
 to_collection(#uce_event{domain=Domain,
                          id=Id,
                          location={Meeting, _},
-                         from={From, _},
+                         from={From, Domain},
                          to={To, _},
                          metadata=Metadata,
                          datetime=Datetime,

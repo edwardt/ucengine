@@ -15,29 +15,23 @@
 %%  You should have received a copy of the GNU Affero General Public License
 %%  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 %%
--module(helpers).
+-module(uce_vhost_sup).
 
--author('victor.goya@af83.com').
+-behaviour(supervisor).
 
--export([paginate/4]).
+-export([start_link/0, init/1]).
 
-paginate(UnsortedList, Count, Page, Order) ->
-    List = case Order of
-	       asc ->
-		   UnsortedList;
-	       desc ->
-		   lists:reverse(UnsortedList)
-	   end,
-    if
-	Count == infinity ->
-	    List;
-	true ->
-	    Start = (Count * (Page - 1)) + 1,
-	    if
-		Start > length(List) ->
-		    [];
-		true ->
-		    lists:sublist(List, Count * Page, Count)
-	    end
-    end.
+start_link() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
+init([]) ->
+    Hosts = config:get(hosts),
+    Vhosts = vhost_supervise(Hosts),
+    {ok, {{one_for_one, 10, 10}, Vhosts}}.
+
+vhost_supervise([]) ->
+    [];
+vhost_supervise([{Domain, _HostConfig}|R]) ->
+    [{uce_vhost:name(Domain),
+      {uce_vhost, start_link, [Domain]},
+      permanent, brutal_kill, worker, [uce_vhost]}|vhost_supervise(R)].

@@ -41,9 +41,6 @@
 -record(uce_meeting, {
           %% uce meeting id
           id = {"", ""},
-          domain,
-          %% name
-          name,
           %% start_date and end_date format : ms since epoch
           start_date = none,
           end_date = none,
@@ -52,27 +49,27 @@
           metadata = []}).
 
 -record(uce_file, {
-	      % file id
+          % file id
           id = none,
           % domain
           domain,
-	      % name
-	      name,
-	      % {Meeting, Domain}
-	      location = {"", ""},
-	      % path
-	      uri = [],
-	      % mime type
-	      mime = "text/plain",
-	      % name as send by the browser
-	      metadata = []
-	 }).
+          % name
+          name,
+          % {Meeting, Domain}
+          location = {"", ""},
+          % path
+          uri = [],
+          % mime type
+          mime = "text/plain",
+          % name as send by the browser
+          metadata = []
+         }).
 
 -record(uce_user, {
           %% User (name, domain)
           id = none,
           auth,
-          credential,
+          credential = "",
           metadata = []}).
 
 -record(uce_infos, {
@@ -87,39 +84,30 @@
           conditions=[]}).
 
 -record(uce_route, {
-          module = [],
-          title = [],
-          desc = [],
-          path = [],
-          types = [],
           method,
           regexp,
-          callbacks}).
+          callback}).
 
 -define(TIMEOUT, 5000).
 
--define(VERSION, config:get(version)).
-
--define(HOST, config:get(host)).
--define(PORT, config:get(port)).
--define(BASE_URL, "http://" ++ ?HOST ++ ":" ++ integer_to_list(?PORT) ++ "/api/" ++ config:get(version)).
+-define(VERSION, "0.4").
 
 -define(SESSION_TIMEOUT, (config:get(presence_timeout) * 1000)).
 
 -define(DEBUG(Format, Args),
-		error_logger:info_msg("DEBUG: ~p:~p: " ++ Format, [?MODULE, ?LINE] ++ Args)).
+        uce_log:debug(Format, [?MODULE, ?LINE], Args)).
 
 -define(INFO_MSG(Format, Args),
-		error_logger:info_msg("~p:~p: " ++ Format, [?MODULE, ?LINE] ++ Args)).
+        error_logger:info_msg(Format, [?MODULE, ?LINE] ++ Args)).
 
 -define(WARNING_MSG(Format, Args),
-		error_logger:warning_msg("~p:~p: " ++ Format, [?MODULE, ?LINE] ++ Args)).
+        error_logger:warning_msg(Format, [?MODULE, ?LINE] ++ Args)).
 
 -define(ERROR_MSG(Format, Args),
-		error_logger:error_msg("~p:~p: " ++ Format, [?MODULE, ?LINE] ++ Args)).
+        error_logger:error_msg(Format, [?MODULE, ?LINE] ++ Args)).
 
 -define(CRITICAL_MSG(Format, Args),
-		error_logger:critical_msg("~p:~p: " ++ Format, [?MODULE, ?LINE] ++ Args)).
+        error_logger:critical_msg(Format, [?MODULE, ?LINE] ++ Args)).
 
 -define(UCE_SCHEMA_LOCATION, "uce_schema_v1.xsd").
 -define(UCE_XMLNS, "http://ucengine.org").
@@ -129,3 +117,21 @@
 -define(NEVER_ENDING_MEETING, 0).
 
 -define(PRESENCE_EXPIRED_EVENT, "internal.presence.expired").
+
+% Backends
+
+-define(PUBSUB_MODULE, mnesia_pubsub).
+-define(AUTH_MODULE(Module),
+        (fun() ->
+                 list_to_atom(Module ++ "_auth")
+         end())).
+-define(DB_MODULE,
+        (fun() ->
+                 list_to_atom(atom_to_list(?MODULE) ++ "_"
+                              ++ atom_to_list(config:get(db)))
+         end())).
+-define(SEARCH_MODULE,
+        (fun() ->
+                 list_to_atom(atom_to_list(?MODULE) ++ "_"
+                              ++ atom_to_list(config:get(search)) ++ "_search")
+         end())).

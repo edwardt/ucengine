@@ -19,12 +19,12 @@
 
 -author('thierry.bomandouki@af83.com').
 
--export([add/1, list/7, delete/2]).
+-export([add/1, commit/0, list/11, delete/2]).
 
 -include("uce.hrl").
 
 -define(DEFAULT_HOST, "http://localhost:8983/solr").
--define(SOLR_UPDATE, "/update?commit=true").
+-define(SOLR_UPDATE, "/update").
 -define(SOLR_SELECT, "/select?").
 
 -define(META_PREFIX, "metadata_").
@@ -34,23 +34,26 @@ add(Event) ->
     ibrowse:send_req(Host ++ ?SOLR_UPDATE, [], post, to_solrxml(Event)),
     {ok, created}.
 
+commit() ->
+    [Host] = utils:get(config:get(solr), [host], [?DEFAULT_HOST]),
+    Commit = lists:flatten(xmerl:export_simple_element({commit, []}, xmerl_xml)),
+    ibrowse:send_req(Host ++ ?SOLR_UPDATE, [], post, Commit),
+    {ok, commited}.
+
 %% Encode event in solrxml format which be used to add solr index
 to_solrxml(#uce_event{id=Id,
+                      domain=Domain,
                       datetime=Datetime,
-                      location=Location,
-                      from=From,
+                      location={Location, _},
+                      from={From, _},
+                      to={To, _},
                       type=Type,
                       metadata=Metadata}) ->
-    LocationElement =
-        case Location of
-            [""] ->
-                [];
-            [Meeting] ->
-                [{field, [{name,"meeting"}], [Meeting]}]
-        end,
+
+    LocationElement = [{field, [{name,"location"}], [Location]}],
 
     MetadataFlattenElement =
-        [{field, [{name, "metadata"}], [lists:flatten([Value || {_, Value} <- Metadata])]}],
+        [{field, [{name, "metadata"}], [lists:flatten([Value ++ " " || {_, Value} <- Metadata])]}],
 
     MetadataElement =
         lists:map(fun({Key, Value}) ->
@@ -59,8 +62,10 @@ to_solrxml(#uce_event{id=Id,
                   Metadata),
 
     DocElements = [{field, [{name,"id"}], [Id]},
+                   {field, [{name,"domain"}], [Domain]},
                    {field, [{name,"datetime"}], [integer_to_list(Datetime)]},
                    {field, [{name,"type"}], [Type]},
+                   {field, [{name,"to"}], [To]},
                    {field, [{name,"from"}], [From]}] ++
         LocationElement ++
         MetadataFlattenElement ++
@@ -79,71 +84,105 @@ params_to_query([{Key, Value}|Tail]) ->
                         [] ->
                             [];
                         _ ->
-                            " +" ++ params_to_query(Tail)
-                    end.
+                            " AND " ++ params_to_query(Tail)
+                    end;
+params_to_query([Value|Tail])
+  when is_list(Value) ->
+    Value ++ case Tail of
+                 [] ->
+                     [];
+                 _ ->
+                     " AND " ++ params_to_query(Tail)
+             end.
 
-list(Location, Search, From, Type, Start, End, Parent) ->
+list(Domain, {Location, Domain}, Search, {From, _}, Types, DateStart, DateEnd, Parent, Start, Rows, Order) ->
     [Host] = utils:get(config:get(solr), [host], [?DEFAULT_HOST]),
-    search(Host, Location, Search, From, Type, Start, End, Parent).
 
-search(Host, [Meeting], Search, From, Type, Start, End, _) ->
-    MeetingSelector =
-        if
-            Meeting /= '_' ->
-                [{"meeting", Meeting}];
-            true ->
-                []
-        end,
+    DomainSelector = [{"domain", Domain}],
 
-    SearchSelector =
+    LocationSelector =
         if
-            Search /= '_' ->
-                [{"metadata", string:join([Key ++ "*" || Key <- Search], "+")}];
+            Location /= "" ->
+                [{"location", Location}];
             true ->
                 []
         end,
 
     FromSelector =
         if
-            From /= '_' ->
+            From /= "" ->
                 [{"from", From}];
             true ->
                 []
         end,
 
-    TypeSelector =
+    ParentSelector =
         if
-            Type /= '_' ->
-                [{"type", Type}];
+            Parent /= "" ->
+                [{"parent", Parent}];
+            true ->
+                []
+        end,
+
+    SearchSelector =
+        if
+            Search /= [] ->
+                [{"metadata", string:join(Search, "+")}];
+            true ->
+                []
+        end,
+
+    TypesSelector =
+        if
+            Types == [] ->
+                [];
+            true ->
+                [" (" ++ string:join(["type:" ++ Type || Type <- Types], " OR ") ++ ") "]
+        end,
+
+    TimeRange =
+        if
+            DateStart /= 0, DateEnd /= infinity ->
+                "[" ++ integer_to_list(DateStart) ++ " TO " ++ integer_to_list(DateEnd) ++ "]";
+            DateStart /= 0 ->
+                "[" ++ integer_to_list(DateStart) ++ " TO *]";
+            DateEnd /= infinity ->
+                "[* TO " ++ integer_to_list(DateEnd) ++ "]";
             true ->
                 []
         end,
 
     TimeSelector =
         if
-            Start /= 0, End /= infinity ->
-                [{"date", "[" ++ integer_to_list(Start) ++ " TO " ++ integer_to_list(End) ++ "]"}];
-            Start /= 0 ->
-                [{"date", "[" ++ integer_to_list(Start) ++ " TO *"}];
-            End /= infinity ->
-                [{"date", "* TO " ++ integer_to_list(End) ++ "]"}];
+            DateStart /= 0; DateEnd /= infinity ->
+                 [{"facet", "on"}, {"facet.field", "datetime"}, {"fq", "datetime:" ++ TimeRange}];
             true ->
                 []
         end,
 
-    Query = [{"q", params_to_query(MeetingSelector ++
+    Query = [{"q", params_to_query(LocationSelector ++
+                                       DomainSelector ++
+                                       ParentSelector ++
                                        FromSelector ++
-                                       TypeSelector ++
+                                       TypesSelector ++
                                        SearchSelector)}],
 
-    EncodedParams = [yaws_api:url_encode(Elem) ++ "=" ++ yaws_api:url_encode(Value) ||
-                        {Elem, Value} <- Query ++ TimeSelector ++ [{"wt", "json"}]],
+    Params = Query ++ TimeSelector ++ [{"wt", "json"},
+                                       {"start", integer_to_list(Start)},
+                                       {"rows", integer_to_list(Rows)},
+                                       {"sort", lists:concat(["datetime ", Order])}],
+    EncodedParams = lists:map(fun({Elem, Value}) ->
+                                      lists:concat([yaws_api:url_encode(Elem),
+                                                    "=",
+                                                    yaws_api:url_encode(Value)])
+                              end,
+                              Params),
 
     case ibrowse:send_req(Host ++ ?SOLR_SELECT ++ string:join(EncodedParams, "&"), [], get) of
         {ok, _, _, JSON} ->
             {ok, json_to_events(mochijson:decode(JSON))};
         {error, _} ->
-            {error, bad_parameters}
+            throw({error, bad_parameters})
     end.
 
 json_to_events({struct, JSON}) ->
@@ -155,8 +194,9 @@ make_list_json_events([]) ->
     [];
 make_list_json_events([{struct, Elems}|Tail]) ->
     case utils:get(Elems,
-                   ["id", "datetime", "meeting","from", "to", "type", "parent"],
+                   ["id", "domain", "datetime", "location","from", "to", "type", "parent"],
                    [none,
+                    none,
                     none,
                     {array, [""]},
                     none,
@@ -164,18 +204,21 @@ make_list_json_events([{struct, Elems}|Tail]) ->
                     none,
                     {array, [""]}]) of
 
-        [none, _, _, _, _, _, _, _] ->
+        [none, _, _, _, _, _, _, _, _] ->
             {error, bad_record};
-        [_, none, _, _, _, _, _, _] ->
+        [_, none, _, _, _, _, _, _, _] ->
             {error, bad_record};
-        [_, _, _, _, none, _, _, _] ->
+        [_, _, none, _, _, _, _, _, _] ->
             {error, bad_record};
-        [_, _, _, _, _, _, none, _] ->
+        [_, _, _, _, _, none, _, _, _] ->
+            {error, bad_record};
+        [_, _, _, _, _, _, _, none, _] ->
             {error, bad_record};
 
         [{array, [Id]},
-         {array, [Datetime]},
-         {array, [Meeting]},
+         {array, [Domain]},
+         Datetime,
+         {array, [Location]},
          {array, [From]},
          {array, [To]},
          {array, [Type]},
@@ -202,10 +245,11 @@ make_list_json_events([{struct, Elems}|Tail]) ->
                                  end,
                                  FlatMetadata),
             [#uce_event{id=Id,
-                        datetime=list_to_integer(Datetime),
-                        location=[Meeting],
-                        from=From,
-                        to=To,
+                        domain=Domain,
+                        datetime=Datetime,
+                        location={Location, Domain},
+                        from={From, Domain},
+                        to={To, Domain},
                         type=Type,
                         parent=Parent,
                         metadata=Metadata}] ++ make_list_json_events(Tail)

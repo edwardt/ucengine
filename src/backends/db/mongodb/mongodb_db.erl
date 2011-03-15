@@ -19,27 +19,28 @@
 
 -author('victor.goya@af83.com').
 
--export([init/1,
+-export([init/2,
          drop/0,
          terminate/0]).
 
 -include("uce.hrl").
 -include("mongodb.hrl").
 
-init({Pool, MongoPoolInfos}) ->
-    case utils:get(MongoPoolInfos,
-		   [size, host, port, database],
-		   [1, "localhost", ?DEFAULT_MONGODB_PORT, ?DEFAULT_MONGODB_NAME]) of
-	[Size, Host, Port, Name] ->
-	    application:start(emongo),
-	    emongo:add_pool(Pool, Host, Port, Name, Size),
-	    ok;
-	_ ->
-	    {error, bad_configuration}
-    end.
+init(Domain, MongoPoolInfos) ->
+    catch application:start(emongo),
+    [Size, Host, Port, Name] = utils:get_values(MongoPoolInfos,
+                                                [{size, "1"},
+                                                 {host, "localhost"},
+                                                 {port, ?DEFAULT_MONGODB_PORT},
+                                                 {database, ?DEFAULT_MONGODB_NAME}]),
+    emongo:add_pool(Domain, Host, Port, Name, Size).
 
 drop() ->
-    emongo:drop_database(?MONGO_POOL).
+    lists:foreach(fun({Domain, _}) ->
+                          catch emongo:drop_database(Domain)
+                  end,
+                  config:get('hosts')).
 
 terminate() ->
     ok.
+

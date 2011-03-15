@@ -24,14 +24,14 @@
 -export([add/1,
          list/1,
          all/1,
-         get/1,
-         delete/1]).
+         get/2,
+         delete/2]).
 
 -include("uce.hrl").
 -include("mongodb.hrl").
 
-add(#uce_file{} = File) ->
-    case catch emongo:insert_sync(?MONGO_POOL, "uce_file", to_collection(File)) of
+add(#uce_file{domain=Domain} = File) ->
+    case catch emongo:insert_sync(Domain, "uce_file", to_collection(File)) of
         {'EXIT', Reason} ->
             ?ERROR_MSG("~p~n", [Reason]),
             throw({error, bad_parameters});
@@ -40,8 +40,8 @@ add(#uce_file{} = File) ->
     end.
 
 list({Location, Domain}) ->
-    case catch emongo:find_all(?MONGO_POOL, "uce_file", [{"location", Location},
-                                                         {"domain", Domain}]) of
+    case catch emongo:find_all(Domain, "uce_file", [{"location", Location},
+                                                                  {"domain", Domain}]) of
         {'EXIT', Reason} ->
             ?ERROR_MSG("~p~n", [Reason]),
             throw({error, bad_parameters});
@@ -50,7 +50,7 @@ list({Location, Domain}) ->
     end.
 
 all(Domain) ->
-    case catch emongo:find_all(?MONGO_POOL, "uce_file", [{"domain", Domain}]) of
+    case catch emongo:find_all(Domain, "uce_file", [{"domain", Domain}]) of
         {'EXIT', Reason} ->
             ?ERROR_MSG("~p~n", [Reason]),
             throw({error, bad_parameters});
@@ -58,8 +58,8 @@ all(Domain) ->
             {ok, [from_collection(File) || File <- Files]}
     end.
 
-get(Id) ->
-    case catch emongo:find_one(?MONGO_POOL, "uce_file", [{"id", Id}]) of
+get(Domain, Id) ->
+    case catch emongo:find_one(Domain, "uce_file", [{"id", Id}]) of
         {'EXIT', Reason} ->
             ?ERROR_MSG("~p~n", [Reason]),
             throw({error, bad_parameters});
@@ -69,8 +69,8 @@ get(Id) ->
             throw({error, not_found})
     end.
 
-delete(Id) ->
-    case catch emongo:delete(?MONGO_POOL, "uce_file", [{"id", Id}]) of
+delete(Domain, Id) ->
+    case catch emongo:delete_sync(Domain, "uce_file", [{"id", Id}]) of
         {'EXIT', Reason} ->
             ?ERROR_MSG("~p~n", [Reason]),
             throw({error, bad_parameters});

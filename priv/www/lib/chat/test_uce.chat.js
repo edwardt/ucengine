@@ -57,7 +57,8 @@ Factories.newTranslationEvent = function(from, text, lang) {
         from: from,
         metadata: {
             text: text,
-            lang: lang
+            lang: lang,
+            from: "chuck"
         }
     };
 }
@@ -89,7 +90,7 @@ test("toggle to big mode", function() {
 });
 
 jackTest("add hashtag", function() {
-    var ucemeeting = jack.create("ucemeeting", ['bind', 'push']);
+    var ucemeeting = jack.create("ucemeeting", ['on', 'push']);
     jack.expect("ucemeeting.push")
         .exactly("1 time")
         .mock(function(eventname, metadata) {
@@ -108,7 +109,7 @@ module("uce.chat", {
     setup: function() {
         var that = this;
         var ucemeeting = {
-            bind: function(eventName, callback) {
+            on: function(eventName, callback) {
                 if (eventName == "twitter.hashtag.add") {
                     that.callback_hashtag = callback;
                 } else if (eventName == "twitter.tweet.new") {
@@ -199,6 +200,22 @@ test("can show hastag tweet and go back", function() {
 
     ok(!$('#chat .ui-chat-container[name="hashtag:#chuck"]').hasClass("ui-chat-current"),
        "should not have class ui-chat-current");
+});
+
+test("can change language", function() {
+    $("#chat .ui-chat-flag.ui-chat-lang-fr").click();
+    ok($('#chat .ui-chat-flag.ui-chat-lang-fr').hasClass("ui-state-highlight"), 
+           "should have class ui-state-highlight");
+    ok($('#chat .ui-chat-container[name=conversation:all:fr]').hasClass("ui-chat-current"), 
+           "should have class ui-state-current");
+
+    $("#chat .ui-chat-flag.ui-chat-lang-en").click();
+    ok($('#chat .ui-chat-flag.ui-chat-lang-en').hasClass("ui-state-highlight"), 
+           "should have class ui-state-highlight");
+    ok(!$('#chat .ui-chat-flag.ui-chat-lang-fr').hasClass("ui-state-highlight"), 
+           "should not have class ui-state-highlight");
+    ok($('#chat .ui-chat-container[name=conversation:all:en]').hasClass("ui-chat-current"), 
+           "should have class ui-state-current");
 });
 
 test("clear chat", function() {

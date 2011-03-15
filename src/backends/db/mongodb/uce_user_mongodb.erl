@@ -30,8 +30,8 @@
 -include("uce.hrl").
 -include("mongodb.hrl").
 
-add(#uce_user{} = User) ->
-    case catch emongo:insert_sync(?MONGO_POOL, "uce_user", to_collection(User)) of
+add(#uce_user{id={_Name,Domain}} = User) ->
+    case catch emongo:insert_sync(Domain, "uce_user", to_collection(User)) of
         {'EXIT', Reason} ->
             ?ERROR_MSG("~p~n", [Reason]),
             throw({error, bad_parameters});
@@ -40,8 +40,8 @@ add(#uce_user{} = User) ->
     end.
 
 delete({Name, Domain}) ->
-    case catch emongo:delete(?MONGO_POOL, "uce_user", [{"name", Name},
-                                                       {"domain", Domain}]) of
+    case catch emongo:delete_sync(Domain, "uce_user", [{"name", Name},
+                                                            {"domain", Domain}]) of
         {'EXIT', Reason} ->
             ?ERROR_MSG("~p~n", [Reason]),
             throw({error, bad_parameters});
@@ -50,9 +50,9 @@ delete({Name, Domain}) ->
     end.    
 
 update(#uce_user{id={Name, Domain}} = User) ->
-    case catch emongo:update(?MONGO_POOL, "uce_user", [{"name", Name},
-                                                       {"domain", Domain}],
-                             to_collection(User), false) of
+    case catch emongo:update_sync(Domain, "uce_user", [{"name", Name},
+                                                            {"domain", Domain}],
+                                  to_collection(User), false) of
         {'EXIT', Reason} ->
             ?ERROR_MSG("~p~n", [Reason]),
             throw({error, bad_parameters});
@@ -61,7 +61,7 @@ update(#uce_user{id={Name, Domain}} = User) ->
     end.
 
 list(Domain) ->
-    case catch emongo:find_all(?MONGO_POOL, "uce_user", [{"domain", Domain}]) of
+    case catch emongo:find_all(Domain, "uce_user", [{"domain", Domain}]) of
         {'EXIT', Reason} ->
             ?ERROR_MSG("~p~n", [Reason]),
             throw({error, bad_parameters});
@@ -74,7 +74,7 @@ list(Domain) ->
     end.
 
 get({Name, Domain}) ->
-    case catch emongo:find_one(?MONGO_POOL, "uce_user", [{"name", Name},
+    case catch emongo:find_one(Domain, "uce_user", [{"name", Name},
                                                          {"domain", Domain}]) of
         {'EXIT', Reason} ->
             ?ERROR_MSG("~p~n", [Reason]),

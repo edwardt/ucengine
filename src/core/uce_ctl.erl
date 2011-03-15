@@ -26,15 +26,21 @@
 
 -include("uce.hrl").
 
-default_node() ->
-    NodeDomain =
-        case re:run(atom_to_list(node()), "@(.*)", [{capture, all, list}]) of
-            {match, [_, Domain]} ->
-                Domain;
-            _ ->
-                "localhost"
-        end,
-    list_to_atom("ucengine@" ++ NodeDomain).
+get_node() ->
+    Command = init:get_arguments(),
+    case utils:get(Command, ['-node']) of
+        [none] ->
+            NodeDomain =
+                case re:run(atom_to_list(node()), "@(.*)", [{capture, all, list}]) of
+                    {match, [_, Domain]} ->
+                        Domain;
+                    _ ->
+                        "localhost"
+                end,
+            list_to_atom("ucengine@" ++ NodeDomain);
+        [[Node]] ->
+            list_to_atom(Node)
+    end.
 
 args_to_dictionary([]) ->
     [];
@@ -218,7 +224,7 @@ display(json, Record, Fields) ->
 
 call(Object, Action, Args) ->
     Module = list_to_atom("uce_" ++ atom_to_list(Object)),
-    case catch rpc:call(default_node(), Module, Action, Args) of
+    case catch rpc:call(get_node(), Module, Action, Args) of
         {badrpc, Reason} ->
             throw({error, Reason});
         {error, Reason} ->
@@ -280,7 +286,8 @@ action(meeting, add, Args) ->
         {[_, none, _, _], _Metadata} ->
             error(missing_parameter);
         {[Domain, Name, Start, End], Metadata} ->
-            {ok, created} = call(meeting, add, [#uce_meeting{id={Name, Domain},
+            {ok, created} = call(meeting, add, [Domain, 
+                                                #uce_meeting{id={Name, Domain},
                                                              start_date=parse_date(Start),
                                                              end_date=parse_date(End),
                                                              metadata=Metadata}]),
@@ -294,7 +301,7 @@ action(meeting, delete, Args) ->
         {[_, none], _} ->
             error(missing_parameter);
         {[Domain, Name], _} ->
-            {ok, deleted} = call(meeting, delete, [{Name, Domain}]),
+            {ok, deleted} = call(meeting, delete, [Domain, {Name, Domain}]),
             success(deleted)
     end;
 
@@ -305,7 +312,7 @@ action(meeting, get, Args) ->
         {[_, none], _} ->
             error(missing_parameter);
         {[Domain, Name], _} ->
-            {ok, Record} = call(meeting, get, [{Name, Domain}]),
+            {ok, Record} = call(meeting, get, [Domain, {Name, Domain}]),
             display(json, Record, record_info(fields, uce_meeting))
     end;
 
@@ -316,7 +323,8 @@ action(meeting, update, Args) ->
         {[_, none, _, _], _Metadata} ->
             error(missing_parameter);
         {[Domain, Name, Start, End], Metadata} ->
-            {ok, updated} = call(meeting, update, [#uce_meeting{id={Name, Domain},
+            {ok, updated} = call(meeting, update, [Domain, 
+                                                   #uce_meeting{id={Name, Domain},
                                                                 start_date=parse_date(Start),
                                                                 end_date=parse_date(End),
                                                                 metadata=Metadata}]),
@@ -347,7 +355,8 @@ action(acl, add, Args) ->
         {[_, _, _, _, none], _} ->
             error(missing_parameter);
         {[Domain, User, Meeting, Object, Action], Conditions} ->
-            {ok, created} = call(acl, add, [#uce_acl{user={User, Domain},
+            {ok, created} = call(acl, add, [Domain, 
+                                            #uce_acl{user={User, Domain},
                                                      location={Meeting, Domain},
                                                      object=Object,
                                                      action=Action,
@@ -367,7 +376,8 @@ action(acl, delete, Args) ->
         {[_, _, _, _, none], _} ->
             error(missing_parameter);
         {[Domain, User, Meeting, Object, Action], Conditions} ->
-            {ok, deleted} = call(acl, delete, [{User, Domain},
+            {ok, deleted} = call(acl, delete, [Domain,
+                                               {User, Domain},
                                                Object,
                                                Action,
                                                {Meeting, Domain},
@@ -387,7 +397,8 @@ action(acl, check, Args) ->
         {[_, _, _, _, none], _} ->
             error(missing_parameter);
         {[Domain, User, Meeting, Object, Action], Conditions} ->
-            case call(acl, check, [{User, Domain},
+            case call(acl, check, [Domain,
+                                   {User, Domain},
                                    Object,
                                    Action,
                                    {Meeting, Domain},
@@ -414,7 +425,8 @@ action(user, add, Args) ->
         {[_, _, _, none], _Metadata} ->
             error(missing_parameter);
         {[Domain, Name, Auth, Credential], Metadata} ->
-            {ok, created} = call(user, add, [#uce_user{id={Name, Domain},
+            {ok, created} = call(user, add, [Domain,
+                                             #uce_user{id={Name, Domain},
                                                        auth=Auth,
                                                        credential=Credential,
                                                        metadata=Metadata}]),
@@ -428,7 +440,7 @@ action(user, delete, Args) ->
         {[_, none], _} ->
             error(missing_parameter);
         {[Domain, Name], _} ->
-            {ok, deleted} = call(user, delete, [{Name, Domain}]),
+            {ok, deleted} = call(user, delete, [Domain, {Name, Domain}]),
             success(deleted)
     end;
 
@@ -440,7 +452,7 @@ action(user, get, Args) ->
         {[_, none], _} ->
             error(missing_parameter);
         {[Domain, Name], _} ->
-            {ok, Record} = call(user, get, [{Name, Domain}]),
+            {ok, Record} = call(user, get, [Domain, {Name, Domain}]),
             display(json, Record, record_info(fields, uce_user));
         {[none], _} ->
             error(missing_parameter)
@@ -457,7 +469,8 @@ action(user, update, Args) ->
         {[_, _, _, none], _Metadata} ->
             error(missing_parameter);
         {[Domain, Name, Auth, Credential], Metadata} ->
-            {ok, updated} = call(user, update, [#uce_user{id={Name, Domain},
+            {ok, updated} = call(user, update, [Domain,
+                                                #uce_user{id={Name, Domain},
                                                           auth=Auth,
                                                           credential=Credential,
                                                           metadata=Metadata}]),
@@ -496,7 +509,7 @@ action(infos, get, Args) ->
 action(infos, update, Args) ->
     case getopt(["domain"], Args) of
         {[Domain], Metadata} ->
-            {ok, updated} = call(infos, update, [#uce_infos{domain=Domain, metadata=Metadata}]),
+            {ok, updated} = call(infos, update, [Domain, #uce_infos{domain=Domain, metadata=Metadata}]),
             success(updated);
         _ ->
             error(missing_parameter)
@@ -505,8 +518,9 @@ action(infos, update, Args) ->
 %%
 %% Utils
 %%
-action(demo, start, Args) ->
-    rpc:call(default_node(), demo, start, Args);
+action(demo, start, _) ->
+    rpc:call(get_node(), demo, start, []),
+    success(started);
 
 action(Object, _, _) ->
     usage(Object).

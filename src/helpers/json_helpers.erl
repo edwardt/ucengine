@@ -17,61 +17,74 @@
 %%
 -module(json_helpers).
 
+-compile({no_auto_import,[error/1]}).
+
 -export([unexpected_error/0,
+         unexpected_error/1,
          error/1,
-         ok/0,
-         true/0,
-         false/0,
-         created/0,
+         error/2,
+         ok/1,
+         true/1,
+         false/1,
          created/1,
-         json/1,
-         xml/1]).
+         created/2,
+         json/2]).
+
+format_response(Status, Content) ->
+    format_response(Status, [], Content).
+
+format_response(Status, Headers, Content) ->
+    Body = mochijson:encode(Content),
+    [{status, Status},
+     {content, "application/json", lists:flatten(Body)}] ++ Headers.
+
+add_cors_headers(Domain) ->
+    cors_helpers:format_cors_headers(Domain).
 
 unexpected_error() ->
-    Content = mochijson:encode({struct, [{error, unexpected_error}]}),
-    [{status, 500},
-     {content, "application/json", lists:flatten(Content)}].
+    format_response(500, {struct, [{error, unexpected_error}]}).
+
+unexpected_error(Domain) ->
+    format_response(500, add_cors_headers(Domain), {struct, [{error, unexpected_error}]}).
 
 error(Reason) ->
-    case http_helpers:error_to_code(Reason) of
-	500 ->
-	    ?MODULE:unexpected_error();
-	Code ->
-	    Content = mochijson:encode({struct, [{error, Reason}]}),
-	    [{status, Code},
-	     {content, "application/json", lists:flatten(Content)}]
-    end.
+    Code = http_helpers:error_to_code(Reason),
+    format_response(Code, {struct, [{error, Reason}]}).
 
-ok() ->
-    Content = mochijson:encode({struct, [{result, ok}]}),
-    [{status, 200},
-     {content, "application/json", lists:flatten(Content)}].
+error(Domain, Reason) ->
+    Code = http_helpers:error_to_code(Reason),
+    format_response(Code, add_cors_headers(Domain), {struct, [{error, Reason}]}).
 
-true() ->
-    Content = mochijson:encode({struct, [{result, "true"}]}),
-    [{status, 200},
-     {content, "application/json", lists:flatten(Content)}].
+ok(Domain) ->
+    format_response(200, add_cors_headers(Domain), {struct, [{result, ok}]}).
 
-false() ->
-    Content = mochijson:encode({struct, [{result, "false"}]}),
-    [{status, 200},
-     {content, "application/json", lists:flatten(Content)}].
+true(Domain) ->
+    format_response(200, add_cors_headers(Domain), {struct, [{result, "true"}]}).
 
-created() ->
-    Content = mochijson:encode({struct, [{result, created}]}),
-    [{status, 201},
-     {content, "application/json", lists:flatten(Content)}].
+false(Domain) ->
+    format_response(200, add_cors_headers(Domain), {struct, [{result, "false"}]}).
 
-created(Id) ->
-    Content = mochijson:encode({struct, [{result, Id}]}),
-    [{status, 201},
-     {content, "application/json", lists:flatten(Content)}].
+created(Domain) ->
+    format_response(201, add_cors_headers(Domain), {struct, [{result, created}]}).
 
-xml(Content) ->
-    [{status, 200},
-     {content, "application/xml", lists:flatten(Content)}].
+created(Domain, Id) ->
+    format_response(201, add_cors_headers(Domain), {struct, [{result, Id}]}).
 
-json(Content) ->
-    JSONContent = mochijson:encode({struct, [{result, Content}]}),
-    [{status, 200},
-     {content, "application/json", lists:flatten(JSONContent)}].
+json(Domain, Content) ->
+    format_response(200, add_cors_headers(Domain), {struct, [{result, Content}]}).
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+unexpected_error_test() ->
+    ?assertMatch([{status, 500}, {content, "application/json", "{\"error\":\"unexpected_error\"}"}], unexpected_error()).
+
+error_test() ->
+    ?assertMatch([{status, 400}, {content, "application/json", "{\"error\":\"bad_parameters\"}"}], error(bad_parameters)),
+    ?assertMatch([{status, 500}, {content, "application/json", "{\"error\":\"hello_world\"}"}], error("hello_world")).
+
+format_response_test() ->
+    ?assertMatch([{status, 200}, {content, "application/json", "\"{}\""}], format_response(200, "{}")),
+    ?assertMatch([{status, 200}, {content, "application/json", "\"{}\""}, {header, "X-Plop: plop"}, {header, "Host: ucengine.org"}], format_response(200, [{header, "X-Plop: plop"}, {header, "Host: ucengine.org"}], "{}")).
+
+-endif.

@@ -19,18 +19,19 @@
 
 -author('victor.goya@af83.com').
 
--export([wait/9]).
+-export([wait/10]).
 
 -include("uce.hrl").
 
-wait(Location, Search, From, Types, Uid, Start, End, Parent, Socket) ->
+wait(Domain, Location, Search, From, Types, Uid, Start, End, Parent, Socket) ->
     Pid = spawn(fun() ->
                         receive
                             {ok, YawsPid} ->
-                                case uce_async:listen(Location,
+                                case uce_async:listen(Domain,
+                                                      Location,
                                                       Search,
-                                                      From, 
-                                                      Types, 
+                                                      From,
+                                                      Types,
                                                       Uid,
                                                       Start,
                                                       End,
@@ -51,7 +52,7 @@ wait(Location, Search, From, Types, Uid, Start, End, Parent, Socket) ->
                                         yaws_api:stream_process_deliver_final_chunk(Socket, JSONError)
                                 end,
                                 yaws_api:stream_process_end(Socket, YawsPid);
-                            {discard, YawsPid}->
+                            {discard, YawsPid} ->
                                 yaws_api:stream_process_end(Socket, YawsPid)
                         end
                 end),

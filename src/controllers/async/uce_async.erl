@@ -19,31 +19,34 @@
 
 -author('victor.goya@af83.com').
 
--export([listen/9]).
+-export([listen/10]).
 
 -include("uce.hrl").
--include("uce_async.hrl").
 
-listen(Location, Search, From, Types, Uid, Start, End, Parent, Socket) ->
+listen(Domain, Location, Search, From, Types, Uid, Start, End, Parent, Socket) ->
     ?PUBSUB_MODULE:subscribe(self(), Location, Search, From, Types, Uid, Start, End, Parent),
     Res = receive
               {message, _} ->
-                  case uce_event:list(Location,
+                  case uce_event:list(Domain,
+                                      Location,
                                       Search,
                                       From,
                                       Types,
                                       Uid,
                                       Start,
                                       End,
-                                      Parent) of
+                                      Parent,
+                                      0,
+                                      infinity,
+                                      asc) of
                       {error, Reason} ->
                           throw({error, Reason});
                       {ok, Events} ->
-                          JSONEvent = mochijson:encode({struct,
-                                                        [{result,
-                                                          event_helpers:to_json(Events)}]}),
+                          JSONEvents = mochijson:encode({struct,
+                                                         [{result,
+                                                           event_helpers:to_json(Events)}]}),
                           yaws_api:stream_process_deliver_final_chunk(Socket,
-                                                                      list_to_binary(JSONEvent)),
+                                                                      list_to_binary(JSONEvents)),
                           ok
                   end;
               _ ->

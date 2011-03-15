@@ -19,13 +19,9 @@
 
 -author('victor.goya@af83.com').
 
--export([add/1, list/7]).
+-export([add/1, list/11]).
 
 -include("uce.hrl").
-
--define(EVENT_DBMOD, (fun() ->
-			      list_to_atom("uce_event_" ++ atom_to_list(config:get(db)))
-		      end())).
 
 add(_) ->
     {ok, created}.
@@ -38,7 +34,8 @@ search_value(Value, [Word|Words]) ->
             false;
         _ ->
             search_value(Value, Words)
-    end. 
+    end.
+
 search_metadata([], _) ->
     false;
 search_metadata([{_, Value}|Tail], Words) ->
@@ -48,13 +45,18 @@ search_metadata([{_, Value}|Tail], Words) ->
         false ->
             search_metadata(Tail, Words)
     end.
-search(Events, Words) ->
+
+filter(Events, []) ->
+    Events;
+filter(Events, Words) ->
     lists:filter(fun(#uce_event{metadata=Metadata}) ->
-			 search_metadata(Metadata, Words)
-		 end,
-		 Events).
+                         search_metadata(Metadata, Words)
+                 end,
+                 Events).
 
-list(Location, Search, From, Type, Start, End, Parent) ->
-    {ok, Events} = ?EVENT_DBMOD:list(Location, From, Type, Start, End, Parent),
-    {ok, search(Events, Search)}.
-
+list(Domain, Location, Search, From, Type, DateStart, DateEnd, Parent, Start, Max, Order) ->
+    {ok, Events} = apply(db:get(uce_event, Domain), list, [Location, From, Type, DateStart, DateEnd, Parent]),
+    FilteredEvents = filter(Events, Search),
+    OrderedEvents = event_helpers:sort(FilteredEvents, Order),
+    EventPage = paginate:paginate(OrderedEvents, Start, Max),
+    {ok, EventPage}.

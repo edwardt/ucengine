@@ -17,49 +17,58 @@
 %%
 -module(presence_controller).
 
--export([init/0, delete/4, add/4]).
+-export([init/0, delete/4, get/4, add/4]).
 
 -include("uce.hrl").
--include("uce_auth.hrl").
 
 init() ->
     [#uce_route{method='POST',
                 regexp="/presence",
-                callbacks=[{?MODULE, add,
-                            ["uid", "credential", "timeout", "metadata"],
-                            [none, none, 0, []],
-                            [string, string, integer ,dictionary]}]},
-     
+                callback={?MODULE, add,
+                          [{"uid", required, string},
+                           {"credential", "", string},
+                           {"timeout", 0, integer},
+                           {"metadata", [], dictionary}]}},
+
+     #uce_route{method='GET',
+                regexp="/presence/([^/]+)",
+                callback={?MODULE, get, []}},
+
      #uce_route{method='DELETE',
                 regexp="/presence/([^/]+)",
-                callbacks=[{?MODULE, delete,
-                            ["uid", "sid"],
-                            [required, required],
-                            [string, string]}]}].
+                callback={?MODULE, delete,
+                          [{"uid", required, string},
+                           {"sid", required, string}]}}].
 
 add(Domain, [], [Name, Credential, Timeout, Metadata], _) ->
-    {ok, User} = uce_user:get({Name, Domain}),
-    {ok, true} = uce_acl:assert(User#uce_user.id, "presence", "add"),
+    {ok, User} = uce_user:get(Domain, {Name, Domain}),
+    {ok, true} = uce_acl:assert(Domain, User#uce_user.id, "presence", "add"),
     {ok, true} = ?AUTH_MODULE(User#uce_user.auth):assert(User, Credential),
-    {ok, Id} = uce_presence:add(#uce_presence{user=User#uce_user.id,
+    {ok, Id} = uce_presence:add(Domain,
+                                #uce_presence{user=User#uce_user.id,
                                               domain=Domain,
                                               timeout=Timeout,
                                               auth=User#uce_user.auth,
                                               metadata=Metadata}),
-    catch uce_event:add(#uce_event{domain=Domain,
-                                   from=User#uce_user.id,
-                                   location={"", Domain},
-                                   type="internal.presence.add"}),
-    json_helpers:created(Id).
+    {ok, _Id} = uce_event:add(Domain,
+                              #uce_event{domain=Domain,
+                                         from=User#uce_user.id,
+                                         location={"", Domain},
+                                         type="internal.presence.add"}),
+    json_helpers:created(Domain, Id).
+
+get(Domain, [Id], [], _) ->
+    {ok, Record} = uce_presence:get(Domain, Id),
+    json_helpers:json(Domain, presence_helpers:to_json(Record)).
 
 delete(Domain, [Id], [Uid, Sid], _) ->
-    {ok, true} = uce_presence:assert({Uid, Domain}, Sid),
-    {ok, Record} = uce_presence:get(Id),
-    {ok, true} = uce_acl:assert({Uid, Domain}, "presence", "delete", {"", Domain},
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, Record} = uce_presence:get(Domain, Id),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "presence", "delete", {"", Domain},
                                 [{"id", Record#uce_presence.id}]),
 
-    catch presence_helpers:clean(Record),
+    ok = presence_helpers:clean(Domain, Record),
 
-    {ok, deleted} = uce_presence:delete(Record#uce_presence.id),
+    {ok, deleted} = uce_presence:delete(Domain, Record#uce_presence.id),
 
-    json_helpers:json(ok).
+    json_helpers:ok(Domain).

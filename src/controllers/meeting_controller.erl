@@ -24,102 +24,118 @@
 init() ->
     [#uce_route{method='POST',
                 regexp="/meeting/all",
-                callbacks=[{?MODULE, add,
-                            ["uid", "sid", "name", "start", "end", "metadata"],
-                            [required, required, required, 0, ?NEVER_ENDING_MEETING, []],
-                            [string, string, string, integer, integer, dictionary]}]},
+                callback={?MODULE, add,
+                          [{"uid", required, string},
+                           {"sid", required, string},
+                           {"name", required, string},
+                           {"start", 0, integer},
+                           {"end", ?NEVER_ENDING_MEETING, integer},
+                           {"metadata", [], dictionary}]}},
      
      #uce_route{method='GET',
                 regexp="/meeting/([^/]+)",
-                callbacks=[{?MODULE, list, [], [], []}]},
+                callback={?MODULE, list,
+                          [{"uid", required, string},
+                           {"sid", required, string}]}},
+
      
      #uce_route{method='GET',
                 regexp="/meeting/all/([^/]+)",
-                callbacks=[{?MODULE, get, [], [], []}]},
+                callback={?MODULE, get,
+                          [{"uid", required, string},
+                           {"sid", required, string}]}},
      
      #uce_route{method='PUT',
                 regexp="/meeting/all/([^/]+)",
-                callbacks=[{?MODULE, update,
-                            ["uid", "sid", "start", "end", "metadata"],
-                            [required, required, 0, ?NEVER_ENDING_MEETING, []],
-                            [string, string, integer, integer, dictionary]}]},
+                callback={?MODULE, update,
+                          [{"uid", required, string},
+                           {"sid", required, string},
+                           {"start", 0, integer},
+                           {"end", ?NEVER_ENDING_MEETING, integer},
+                           {"metadata", [], dictionary}]}},
      
      #uce_route{method='POST',
                 regexp="/meeting/all/([^/]+)/roster",
-                callbacks=[{?MODULE, join,
-                            ["uid", "sid"],
-                            [required, required],
-                            [string, string]}]},
+                callback={?MODULE, join,
+                          [{"uid", required, string},
+                           {"sid", required, string}]}},
      
      #uce_route{method='DELETE',
                 regexp="/meeting/all/([^/]+)/roster/([^/]+)",
-                callbacks=[{?MODULE, leave,
-                            ["uid", "sid"],
-                            [required, required],
-                            [string, string]}]},
+                callback={?MODULE, leave,
+                          [{"uid", required, string},
+                           {"sid", required, string}]}},
      
      #uce_route{method='GET',
                 regexp="/meeting/all/([^/]+)/roster",
-                callbacks=[{?MODULE, roster,
-                            ["uid", "sid"],
-                            [required, required],
-                            [string, string]}]}].
+                callback={?MODULE, roster,
+                          [{"uid", required, string},
+                           {"sid", required, string}]}}].
 
 add(Domain, [], [Uid, Sid, Name, Start, End, Metadata], _) ->
-    {ok, true} = uce_presence:assert({Uid, Domain}, Sid),
-    {ok, true} = uce_acl:assert({Uid, Domain}, "meeting", "add"),
-    {ok, created} = uce_meeting:add(#uce_meeting{id={Name, Domain},
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "meeting", "add"),
+    {ok, created} = uce_meeting:add(Domain,
+                                    #uce_meeting{id={Name, Domain},
                                                  start_date=Start,
                                                  end_date=End,
                                                  metadata=Metadata}),
-    json_helpers:created().
+    json_helpers:created(Domain).
 
-list(Domain, [Status], [], _) ->
+list(Domain, [Status], [Uid, Sid], _) ->
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "meeting", "list"),
     {ok, Meetings} = uce_meeting:list(Domain, Status),
-    json_helpers:json({array, [meeting_helpers:to_json(Meeting) || Meeting <- Meetings]}).
+    json_helpers:json(Domain, {array, [meeting_helpers:to_json(Meeting) || Meeting <- Meetings]}).
 
-get(Domain, [Name], [], _) ->
-    {ok, Meeting} = uce_meeting:get({Name, Domain}),
-    json_helpers:json(meeting_helpers:to_json(Meeting)).
+get(Domain, [Name], [Uid, Sid], _) ->
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "meeting", "get"),
+    {ok, Meeting} = uce_meeting:get(Domain, {Name, Domain}),
+    json_helpers:json(Domain, meeting_helpers:to_json(Meeting)).
 
 update(Domain, [Name], [Uid, Sid, Start, End, Metadata], _) ->
-    {ok, true} = uce_presence:assert({Uid, Domain}, Sid),
-    {ok, true} = uce_acl:assert({Uid, Domain}, "meeting", "update", {Name, Domain}),
-    {ok, updated} = uce_meeting:update(#uce_meeting{id={Name, Domain},
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "meeting", "update", {Name, Domain}),
+    {ok, updated} = uce_meeting:update(Domain,
+                                       #uce_meeting{id={Name, Domain},
                                                     start_date=Start,
                                                     end_date=End,
                                                     metadata=Metadata}),
-    json_helpers:ok().
+    json_helpers:ok(Domain).
 
 join(Domain, [Name], [Uid, Sid], _) ->
-    {ok, true} = uce_presence:assert({Uid, Domain}, Sid),
-    {ok, true} = uce_acl:assert({Uid, Domain}, "roster", "add", {Name, Domain}),
-    {ok, updated} = uce_meeting:join({Name, Domain}, {Uid, Domain}),
-    uce_presence:join(Sid, {Name, Domain}),
-    catch uce_event:add(#uce_event{domain=Domain,
-                                   type="internal.roster.add",
-                                   location={Name, Domain},
-                                   from={Uid, Domain}}),
-    json_helpers:ok().
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "roster", "add", {Name, Domain}),
+    {ok, updated} = uce_meeting:join(Domain, {Name, Domain}, {Uid, Domain}),
+    uce_presence:join(Domain, Sid, {Name, Domain}),
+    {ok, _Id} = uce_event:add(Domain,
+                              #uce_event{domain=Domain,
+                                         type="internal.roster.add",
+                                         location={Name, Domain},
+                                         from={Uid, Domain}}),
+    json_helpers:ok(Domain).
 
 %% TODO : Incomplete Sid must be ToSid
 leave(Domain, [Name, User], [Uid, Sid], _) ->
-    {ok, true} = uce_presence:assert({Uid, Domain}, Sid),
-    {ok, true} = uce_acl:assert({Uid, Domain}, "roster", "delete", {Name, Domain}),
-    {ok, updated} = uce_meeting:leave({Name, Domain}, {User, Domain}),
-    uce_presence:leave(Sid, {Name, Domain}),
-    catch uce_event:add(#uce_event{domain=Domain,
-                                   type="internal.roster.delete",
-                                   location={Name, Domain},
-                                   from={User, Domain}}),
-    json_helpers:ok().
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "roster", "delete", {Name, Domain}),
+    {ok, updated} = uce_meeting:leave(Domain, {Name, Domain}, {User, Domain}),
+    uce_presence:leave(Domain, Sid, {Name, Domain}),
+    {ok, _Id} = uce_event:add(Domain,
+                              #uce_event{domain=Domain,
+                                         type="internal.roster.delete",
+                                         location={Name, Domain},
+                                         from={User, Domain}}),
+    json_helpers:ok(Domain).
 
 roster(Domain, [Name], [Uid, Sid], _) ->
-    {ok, true} = uce_presence:assert({Uid, Domain}, Sid),
-    {ok, true} = uce_acl:assert({Uid, Domain}, Uid, "roster", "list", {Name, Domain}),
-    {ok, Roster} = uce_meeting:roster({Name, Domain}),
-    json_helpers:json({array, lists:map(fun(Member) ->
-                                                {ok, User} = uce_user:get(Member),
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "roster", "list", {Name, Domain}),
+    {ok, Roster} = uce_meeting:roster(Domain, {Name, Domain}),
+    json_helpers:json(Domain,
+                      {array, lists:map(fun(Member) ->
+                                                {ok, User} = uce_user:get(Domain, Member),
                                                 user_helpers:to_json(User)
                                         end,
                                         Roster)}).

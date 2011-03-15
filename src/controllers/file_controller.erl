@@ -26,43 +26,44 @@
 init() ->
     [#uce_route{method='POST',
                 regexp="/file/([^/]+)",
-                callbacks=[{?MODULE, add,
-                            ["uid", "sid", "_filename", "_uri", "metadata"],
-                            [required, required, required, required, []],
-                            [string, string, string, string, dictionary]}]},
-     
+                callback={?MODULE, add,
+                          [{"uid", required, string},
+                           {"sid", required, string},
+                           {"_filename", required, string},
+                           {"_uri", required, string},
+                           {"metadata", [], dictionary}]}},
+
      #uce_route{method='GET',
                 regexp="/file/([^/]+)",
-                callbacks=[{?MODULE, list,
-                            ["uid", "sid"],
-                            [required, required],
-                            [string, string]}]},
-     
+                callback={?MODULE, list,
+                          [{"uid", required, string},
+                           {"sid", required, string}]}},
+
      #uce_route{method='GET',
                 regexp="/file/([^/]+)/([^/]+)",
-                callbacks=[{?MODULE, get,
-                            ["uid", "sid"],
-                            [required, required],
-                            [string, string]}]},
-     
+                callback={?MODULE, get,
+                          [{"uid", required, string},
+                           {"sid", required, string}]}},
+
      #uce_route{method='DELETE',
                 regexp="/file/([^/]+)/([^/]+)",
-                callbacks=[{?MODULE, delete,
-                            ["uid", "sid"],
-                            [required, required],
-                            [string, string]}]}].
+                callback={?MODULE, delete,
+                          [{"uid", required, string},
+                           {"sid", required, string}]}}].
+
 
 add(Domain, [Meeting], [Uid, Sid, Name, Uri, Metadata], _) ->
-    {ok, true} = uce_presence:assert({Uid, Domain}, Sid),
-    {ok, true} = uce_acl:assert({Uid, Domain}, "file", "add", {Meeting, Domain}),
-    {ok, Id} = uce_file:add(#uce_file{location={Meeting, Domain},
-                                      domain=Domain,
-                                      name=Name,
-                                      uri=Uri,
-                                      metadata=Metadata}),
-    {ok, File} = uce_file:get(Id),
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "file", "add", {Meeting, Domain}),
+    {ok, Id} = uce_file:add(Domain, #uce_file{location={Meeting, Domain},
+                                              domain=Domain,
+                                              name=Name,
+                                              uri=Uri,
+                                              metadata=Metadata}),
+    {ok, File} = uce_file:get(Domain, Id),
     {ok, FileInfo} = file:read_file_info(get_path(File#uce_file.uri)),
-    uce_event:add(#uce_event{domain=Domain,
+    uce_event:add(Domain,
+                  #uce_event{domain=Domain,
                              location={Meeting, Domain},
                              from={Uid, Domain},
                              type="internal.file.add",
@@ -70,35 +71,35 @@ add(Domain, [Meeting], [Uid, Sid, Name, Uri, Metadata], _) ->
                                         {"name", File#uce_file.name},
                                         {"size", integer_to_list(FileInfo#file_info.size)},
                                         {"mime", File#uce_file.mime}]}),
-    file_helpers:upload(File#uce_file.id).
+    json_helpers:created(Domain, File#uce_file.id).
 
 list(Domain, [Meeting], [Uid, Sid], _) ->
-    {ok, true} = uce_presence:assert({Uid, Domain}, Sid),
-    {ok, true} = uce_acl:assert({Uid, Domain}, "file", "list", {Meeting, Domain}),
-    {ok, Files} = uce_file:list({Meeting, Domain}),
-    json_helpers:json({array, [file_helpers:to_json(File) || File <- Files]}).
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "file", "list", {Meeting, Domain}),
+    {ok, Files} = uce_file:list(Domain, {Meeting, Domain}),
+    json_helpers:json(Domain, {array, [file_helpers:to_json(File) || File <- Files]}).
 
 %%
 %% @doc Get real path from encoded uri of record uce_file
 %% @spec (Uri::list) -> list
 %%
 get_path(Uri) ->
-    re:replace(Uri, "file\:\/", config:get(datas), [{return, list}]).
+    re:replace(Uri, "file\:\/\/", "", [{return, list}]).
 
 get(Domain, [Meeting, Id], [Uid, Sid], _) ->
-    {ok, true} = uce_presence:assert({Uid, Domain}, Sid),
-    {ok, true} = uce_acl:assert({Uid, Domain}, "file", "get", {Meeting, Domain}, [{"id", Id}]),
-    {ok, File} = uce_file:get(Id),
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "file", "get", {Meeting, Domain}, [{"id", Id}]),
+    {ok, File} = uce_file:get(Domain, Id),
     Path = get_path(File#uce_file.uri),
     case file:read_file(Path) of
         {error, Reason} ->
             throw({error, Reason});
         {ok, Content} ->
-            file_helpers:download(File#uce_file.id, Content)
+            file_helpers:download(Domain, File#uce_file.id, Content)
     end.
 
 delete(Domain, [Meeting, Id], [Uid, Sid], _) ->
-    {ok, true} = uce_presence:assert({Uid, Domain}, Sid),
-    {ok, true} = uce_acl:assert({Uid, Domain}, "file", "delete", {Meeting, Domain}, [{"id", Id}]),
-    {ok, deleted} = uce_file:delete(Id),
-    json_helpers:ok().
+    {ok, true} = uce_presence:assert(Domain, {Uid, Domain}, Sid),
+    {ok, true} = uce_acl:assert(Domain, {Uid, Domain}, "file", "delete", {Meeting, Domain}, [{"id", Id}]),
+    {ok, deleted} = uce_file:delete(Domain, Id),
+    json_helpers:ok(Domain).

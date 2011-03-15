@@ -22,14 +22,14 @@
 -include("uce.hrl").
 -include_lib("yaws/include/yaws_api.hrl").
 
--export([out/1, call_handlers/4, convert_param/2]).
+-export([out/1]).
 
-convert_param(Param, Type)
+convert(Param, Type)
   when is_atom(Type) ->
-    convert_param(Param, [Type]);
-convert_param(_, []) ->
-    {error, bad_parameters};
-convert_param(Param, [Type|Tail]) ->
+    convert(Param, [Type]);
+convert(_, []) ->
+    throw({error, bad_parameters});
+convert(Param, [Type|Tail]) ->
     Result = if
                  Type == string ->
                      Param;
@@ -60,100 +60,119 @@ convert_param(Param, [Type|Tail]) ->
              end,
     case Result of
         {error, _} ->
-            convert_param(Param, Tail);
+            convert(Param, Tail);
         _ ->
             Result
     end.
 
-convert([], []) ->
+validate(_, []) ->
     [];
-convert([RawParam|ParamTail], [Types|TypeTail]) ->
-    case convert_param(RawParam, Types) of
+validate(Query, [{Name, Default, Types}|ParamsSpecList]) ->
+    case utils:get(Query, [Name], [Default]) of
         {error, Reason} ->
-            {error, Reason};
-        Param ->
-            case convert(ParamTail, TypeTail) of
-                {error, Reason} ->
-                    {error, Reason};
-                Remaining ->
-                    [Param] ++ Remaining
-            end
+            throw({error, Reason});
+        [required] ->
+            throw({error, missing_parameters});
+        [RawValue] ->
+            [convert(RawValue, Types)] ++ validate(Query, ParamsSpecList)
     end.
 
-validate(Query, ParamsList, ParamsDefault, Types) ->
-    case utils:get(Query, ParamsList, ParamsDefault) of
+
+call_handlers(Domain, {Module, Function, ParamsSpecList}, Query, Match, Arg) ->
+    case catch validate(Query, ParamsSpecList) of
         {error, Reason} ->
-            {error, Reason};
-        RawParams ->
-            case lists:member(required, RawParams) of
-                true ->
-                    {error, missing_parameters};
-                false ->
-                    case convert(RawParams, Types) of
-                        {error, Reason} ->
-                            {error, Reason};
-                        Params ->
-                            {ok, Params}
-                    end
-            end
-    end.
-
-call_handlers([], _, _, _) ->
-    json_helpers:error(not_found);
-call_handlers([{Module, Function, ParamsList, ParamsDefault, Types}|_Tl], Query, Match, Arg) ->
-    case validate(Query, ParamsList, ParamsDefault, Types) of
-        {error, Reason} ->
-            json_helpers:error(Reason);
-        {ok, Params} ->
-
-            Domain =
-                case catch string:sub_word(Arg#arg.headers#headers.host, 1, $:) of
-                    Result when is_list(Result) ->
-                        Result;
-                    _ ->
-                        config:get(default_domain)
-                end,
-
+            json_helpers:error(Domain, Reason);
+        Params ->
+            ?DEBUG("~p~n", [Params]),
             ?DEBUG("~p: call ~p:~p matching ~p with ~p~n", [Domain, Module, Function, Match, Params]),
             case catch Module:Function(Domain, Match, Params, Arg) of
                 {error, Reason} ->
                     ?ERROR_MSG("~p: error: ~p:~p: ~p~n", [Domain, Module, Function, Reason]),
-                    json_helpers:error(Reason);
+                    json_helpers:error(Domain, Reason);
                 {'EXIT', {function_clause, [{Module, Function,_}|_]}} ->
                     ?ERROR_MSG("~p: error: ~p:~p: function not found~n", [Domain, Module, Function]),
-                    json_helpers:error(not_found);
+                    json_helpers:error(Domain, not_found);
                 {'EXIT', Reason} ->
                     ?ERROR_MSG("~p: error: ~p:~p: ~p~n", [Domain, Module, Function, Reason]),
-                    json_helpers:error(Reason);
+                    json_helpers:error(Domain, Reason);
                 {streamcontent_from_pid, _, _} = Stream ->
-                    Stream;
+                    cors_helpers:format_cors_headers(Domain) ++ [Stream];
                 Response when is_list(Response) ->
                     Response;
                 Error ->
                     ?ERROR_MSG("~p: error: ~p:~p: ~p~n", [Domain, Module, Function, Error]),
-                    json_helpers:unexpected_error()
+                    json_helpers:unexpected_error(Domain)
             end
     end.
 
 out(#arg{} = Arg) ->
-    case uce_http:parse(Arg) of
+    case get_host(Arg) of
+        {ok, Host} ->
+            case uce_http:parse(Host, Arg) of
+                {error, Reason} ->
+                    json_helpers:error(Reason);
+                {get_more, _, _} = State ->
+                    State;
+                {Method, Path, Query} ->
+                    process(Host, Method, Path, Query, Arg);
+                _ ->
+                    json_helpers:unexpected_error()
+            end;
         {error, Reason} ->
-            json_helpers:error(Reason);
-        {get_more, _, _} = State ->
-            State;  
-      {Method, Path, Query} ->
-            process(Method, Path, Query, Arg);
-        _ ->
-            json_helpers:unexpected_error()
+            json_helpers:error(Reason)
     end.
 
-process(Method, Path, Query, Arg) ->
+process(Host, Method, Path, Query, Arg) ->
     case routes:get(Method, Path) of
         {ok, Match, Handlers} ->
-            ?MODULE:call_handlers(Handlers, Query, Match, Arg);
+            call_handlers(Host, Handlers, Query, Match, Arg);
         {error, not_found} ->
             ?ERROR_MSG("~p ~p: no route found~n", [Method, Path]),
             json_helpers:error(not_found);
         {error, Reason} ->
             json_helpers:error(Reason)
     end.
+
+get_host(#arg{} = Arg) ->
+    case extract_host(Arg) of
+        {ok, Host} ->
+            valid_host(Host, config:get(hosts));
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+extract_host(#arg{headers = Headers}) ->
+    case catch string:sub_word(Headers#headers.host, 1, $:) of
+        Host when is_list(Host) ->
+            {ok, Host};
+        _ ->
+            {error, not_found}
+    end.
+
+valid_host(Host, Hosts) ->
+    case proplists:lookup(Host, Hosts) of
+        none ->
+            {error, not_found};
+        _ ->
+            {ok, Host}
+    end.
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+create_headers() ->
+    #arg{}.
+create_headers(Host) ->
+    #arg{headers = #headers{host=Host}}.
+
+extract_host_test() ->
+    ?assertEqual({ok, "localhost"}, extract_host(create_headers("localhost"))),
+    ?assertEqual({ok, "localhost"}, extract_host(create_headers("localhost:5280"))),
+    ?assertEqual({error, not_found}, extract_host(create_headers())).
+
+host_valid_test() ->
+    ?assertEqual({ok, "localhost"}, valid_host("localhost", [{"localhost", []}, {"demo", []}])),
+    ?assertEqual({ok, "demo"}, valid_host("demo", [{"localhost", []}, {"demo", []}])),
+    ?assertEqual({error, not_found}, valid_host("localhost", [{"demo", []}])).
+
+-endif.

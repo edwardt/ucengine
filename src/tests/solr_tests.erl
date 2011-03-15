@@ -26,7 +26,7 @@ solr_test_() ->
     { setup
     , fun fixtures:setup/0
     , fun fixtures:teardown/1
-	, fun([Domain, _, _]) ->
+    , fun([Domain, _, _]) ->
         [ ?_test(test_add(Domain))
         , ?_test(test_search(Domain))
         ]
@@ -34,16 +34,17 @@ solr_test_() ->
     }.
 
 test_add(Domain) ->
-    {ok, created} = uce_event_solr_search:add(Domain,
-                                              #uce_event{id=utils:random(),
+    {ok, created} = uce_event_solr_search:add(#uce_event{id=utils:random(),
+                                                         domain=Domain,
                                                          datetime=utils:now(),
-                                                         location=["testmeeting"],
-                                                         from="chuck_norris",
+                                                         location={"testmeeting", Domain},
+                                                         from={"chuck_norris", Domain},
                                                          type="test_solr_event",
                                                          metadata=[{"text","This is a test event."}]}).
 
 test_search(Domain) ->
-    ok = case uce_event_solr_search:list(Domain, ['_'], ["This"], '_', '_', 0, infinity, '_') of
+    timer:sleep(2000),
+    ok = case uce_event_solr_search:list(Domain, {"", Domain}, ["This"], {"", Domain}, [], 0, infinity, "", 0, 1, asc) of
              {error, Reason} ->
                  {error, Reason};
              {ok, [_]} ->
