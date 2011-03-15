@@ -114,34 +114,27 @@ function sammyapp() {
     };
 
     this.get('#/', function(context) {
-        if (open) {
-            if (!(client.connected)) {
-                var uid      = "guest_" + (new Date().getTime());
-                var nickname = uid;
-                var password = "default_password";
-                
-                var that = this;
-                clien.user.registerWithPassword(uid, password, {'nickname': nickname},
-                                                function(err, result) {
-                                                    client.auth(uid,
-                                                                password,
-                                                                {'nickname': nickname},
-                                                                function(err, result, xhr) {
-                                                                    if (err) {
-                                                                        return;
-                                                                    }
-                                                                    var presence = uce.attachPresence(result);
-                                                                    that.trigger('connected', {me:uid, presence:presence});
-                                                                });                  
-                                              });
-            } else {
-                this.redirect('#/meeting/demo');
-            }
+        if (!(client.connected)) {
+            var uid      = "guest_" + (new Date().getTime());
+            var nickname = uid;
+            var password = "default_password";
+            
+            var that = this;
+            client.user.registerWithPassword(uid,
+                                             password,
+                                             {'nickname': nickname},
+                                             function(err, result) {
+                                                 client.auth(uid, password,
+                                                             {'nickname': nickname},
+                                                             function(err, result, xhr) {
+                                                                 if (err) {
+                                                                     return;
+                                                                 }
+                                                                 that.trigger('connected', {me:uid});
+                                                             });                  
+                                             });
         } else {
-            this.title('Home');
-            build_home(function(c) {
-                context.loadPage('templates/index.tpl', c);
-            });
+            this.redirect('#/meeting/demo');
         }
     });
     this.post('#/user/login', function() {
