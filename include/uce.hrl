@@ -1,8 +1,6 @@
 -record(uce_event, {
-          %% Id
-          id = none,
-          % Domain (vhost)
-          domain,
+          %% {eventid, Domain}
+          id = {none, none},
           %% date (ms from epoch)
           datetime = undefined,
           %% location = [Meeting]
@@ -19,10 +17,8 @@
           metadata = []}).
 
 -record(uce_presence, {
-          %% Id
-          id = none,
-          %% domain
-          domain,
+          %% {presenceid, domain}
+          id = {none, none},
           %% user id
           user,
           %% authification method
@@ -49,10 +45,8 @@
           metadata = []}).
 
 -record(uce_file, {
-          % file id
-          id = none,
-          % domain
-          domain,
+          % {fileid, domain}
+          id = {none, none},
           % name
           name,
           % {Meeting, Domain}
@@ -67,7 +61,7 @@
 
 -record(uce_user, {
           %% User (name, domain)
-          id = none,
+          id = {none, none},
           auth,
           credential = "",
           metadata = []}).
@@ -98,16 +92,16 @@
         uce_log:debug(Format, [?MODULE, ?LINE], Args)).
 
 -define(INFO_MSG(Format, Args),
-        error_logger:info_msg(Format, [?MODULE, ?LINE] ++ Args)).
+        uce_log:info(Format, [?MODULE, ?LINE], Args)).
 
 -define(WARNING_MSG(Format, Args),
-        error_logger:warning_msg(Format, [?MODULE, ?LINE] ++ Args)).
+        uce_log:warning(Format, [?MODULE, ?LINE], Args)).
 
 -define(ERROR_MSG(Format, Args),
-        error_logger:error_msg(Format, [?MODULE, ?LINE] ++ Args)).
+        uce_log:error(Format, [?MODULE, ?LINE], Args)).
 
 -define(CRITICAL_MSG(Format, Args),
-        error_logger:critical_msg(Format, [?MODULE, ?LINE] ++ Args)).
+        uce_log:critical(Format, [?MODULE, ?LINE], Args)).
 
 -define(UCE_SCHEMA_LOCATION, "uce_schema_v1.xsd").
 -define(UCE_XMLNS, "http://ucengine.org").
