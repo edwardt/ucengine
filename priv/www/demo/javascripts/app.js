@@ -416,7 +416,6 @@ $.sammy("#meeting", function() {
 
         if (inReplay) {
             // disabled some widgets
-            $('#files').file("option", "upload", false);
             $('#whiteboard').whiteboard("option", {disabled: true});
 
             $('#search').search({ucemeeting: meeting});
@@ -440,7 +439,6 @@ $.sammy("#meeting", function() {
                 }
                 function clearWidgets() {
                     $('#whiteboard').whiteboard("clear");
-                    $('#files').file("clear");
                     $('#chat').chat("clear");
                     $('#fileupload').fileupload("clear");
                 }
@@ -500,7 +498,6 @@ $.sammy("#meeting", function() {
         }
         $('#chat').chat("destroy");
         $('#whiteboard').whiteboard("destroy");
-        $('#files').file("destroy");
         $('#fileupload').fileupload("destroy");
         this.unload();
     };
