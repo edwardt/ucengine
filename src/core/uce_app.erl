@@ -83,7 +83,6 @@ setup_controllers() ->
                    meeting_controller,
                    event_controller,
                    file_controller,
-                   acl_controller,
                    time_controller,
                    infos_controller,
                    search_controller]).
